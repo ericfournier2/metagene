@@ -1,8 +1,8 @@
 #' A class to manage metagene analysis.
 #'
 #' This class will allow to load, convert and normalize alignments and regions
-#' files/data. Once the data is ready, the user can then chose to produce
-#' metagene plots on the data (or a subset of the data).
+#' files/data. Once the data is ready, the user can then choose to produce
+#' metagene plots on the data or some subset of it.
 #'
 #' @section Constructor:
 #' \describe{
@@ -10,9 +10,12 @@
 #'                            cores = SerialParam(), verbose = FALSE,
 #'                            force_seqlevels = FALSE, paired_end = FALSE,
 #'                            assay = 'chipseq'))}}
-#'    \item{regions}{Either a \code{vector} of BED, narrowPeak or broadPeak
-#'                    filenames, a \code{GRanges} object or a 
-#'                    \code{GRangesList} object.}
+#'    \item{regions}{Either a \code{vector} of filenames, a \code{GRanges} object 
+#'                    or a \code{GRangesList} object. Supported file formats are
+#'                    BED, narrowPeak, broadPeak, gff and gtf. For rnaseq assays,
+#'                    a GRanges object represents a single gene, while multiple
+#'                    genes are represented by a \code{GRangesList} object, where
+#'                    each individual \code{GRanges} is a set of exons.}
 #'    \item{bam_files}{A \code{vector} of BAM filenames. The BAM files must be
 #'                    indexed. i.e.: if a file is named file.bam, there must
 #'                    be a file named file.bam.bai or file.bai in the same 
@@ -32,8 +35,22 @@
 #'    \item{paired_end}{If \code{TRUE}, metagene will deal with paired-ended 
 #'                data. If \code{FALSE}, single-ended data are expected. 
 #'                Default: \code{FALSE}}
-#'    \item{assay}{\code{'chipseq'} or \code{'rnaseq'}, the two available 
-#'                options. Default: \code{'chipseq'}}
+#'    \item{assay}{\code{'chipseq'} or \code{'rnaseq'} Default: \code{'chipseq'}}
+#'    \item{strand_specific}{If \code{TRUE}, only reads which align to the same 
+#'                           strand as those specified in \code{regions} will
+#'                           count toward coverage for that region. Useful for RNA-seq
+#'                           profiles generated from strand-specific libraries, such
+#'                           as Illumina TruSeq. Default: \code{'FALSE'}}
+#'    \item{paired_end_strand_mode}{\code{'1'} or \code{'2'}. In paired-end mode
+#'                                  indicates which read in a pair sets the pair's strand.
+#'                                  If \code{1}, this is the first read (This should be used
+#'                                  with directional protocols such as Directional Illumina 
+#'                                  (Ligation) or Standard SOLiD).
+#'                                  If \code{2}, this is the second read (This should be used
+#'                                  with directional protocols such as dUTP, NSR, NNSR, 
+#'                                  or Illumina stranded TruSeq PE).
+#'                                  Ignored if either paired_end or strand_specific is FALSE.
+#'                                  Default: \code{'2'}}
 #' }
 #'
 #'    \code{metagene$new} returns a \code{metagene} object that contains the
@@ -42,7 +59,7 @@
 #'
 #' @return
 #' \code{metagene$new} returns a \code{metagene} object which contains the
-#' normalized coverage values for every regions and for every BAM files.
+#' normalized coverage values for every regions in all specified BAM files.
 #'
 #' @section Methods:
 #' \describe{
@@ -64,26 +81,27 @@
 #' \describe{
 #'    \item{}{\code{mg$produce_table(design, bin_count, noise_removal,
 #'                normalization, flip_regions, bin_size = NULL}}
-#'    \item{design}{A \code{data.frame} that describe to experiment to plot.
+#'    \item{design}{A \code{data.frame} that describe the experiment to plot.
 #'            see \code{plot} function for more details. \code{NA} can 
-#'            be used keep previous design value. Default: \code{NA}.}
-#'    \item{bin_count}{The number of bin to create. \code{NA} can be used to
-#'                    keep previous bin_count value. A bin_count value of 100
-#'                    will be used if no value is specified. Default:
-#'                    \code{NA}.}
+#'            be used to keep the previous design value. Default: \code{NA}.}
+#'    \item{bin_count}{The number of bins to create. \code{NA} can be used to
+#'                    keep the previous bin_count value. For ChIP-Seq analyses,
+#'                    a bin_count of 100 will be used if no value is specified.
+#'                    For RNA-seq analyses, no binning will occur unless a bin_count
+#'                    is explicitly specified. Default: \code{NA}.}
 #'    \item{noise_removal}{The algorithm to use to remove control(s). Possible
 #'                        values are \code{NA}, \code{NULL} or "NCIS". By
-#'                        default, value is \code{NULL}. Use \code{NA} keep
-#'                        previous \code{noise_removal} value (i.e. if
+#'                        default, value is \code{NULL}. Use \code{NA} to keep
+#'                        the previous \code{noise_removal} value (i.e. if
 #'                        \code{produce_table} was called before). See
 #'                        Liand and Keles 2012 for the NCIS algorithm.}
 #'    \item{normalization}{The algorithm to use to normalize samples. Possible
-#;                        values are \code{NA}, \code{NULL} or "RPM". By
+#'                        values are \code{NA}, \code{NULL} or "RPM". By
 #'                        default, value is \code{NULL} and no normalization
 #'                        will be performed. Use \code{NA} keep
 #'                        previous \code{normalization} value (i.e. if
 #'                        \code{produce_table} was called before).}
-#'    \item{flip_regions}{Should regions on negative strand be flip_regions?
+#'    \item{flip_regions}{Should regions on the negative strand be flipped?
 #'                        Default: \code{FALSE}.}
 #'    \item{bin_size}{Deprecated.}
 #' }
@@ -93,13 +111,14 @@
 #'    \item{alpha}{The range of the estimation to be shown with the ribbon.
 #'                \code{1 - alpha / 2} and \code{alpha / 2} will be used.
 #'                Default: 0.05.}
-#'    \item{sample_count}{The number of draw to do in the bootstrap
-#'                        calculation. Default: 1000.}
-#'    \item{avoid_gaps}{Provide the possibility to remove values = 0 and refit
-#'                    the data_frame for this suppression.
-#'                    Default : \code{FALSE}.}
-#'    \item{gaps_threshold}{It works with avoid_gaps argument. It lets to remove
-#'                    values <= at gaps_threshold. Default : 0.}
+#'    \item{sample_count}{The number of draws to perform in the bootstrap
+#'                        calculations. Default: 1000.}
+#'    \item{avoid_gaps}{Removes regions below the coverage threshold specified 
+#'                      by \code{gaps_threshold}, and refits the data_frame 
+#'                      accordingly. Default: \code{FALSE}.}
+#'    \item{gaps_threshold}{Sets the threshold used for the gap removal procedure.
+#'                          Regions with values values <= gaps_threshold will be removed.
+#'                          Ignored if avoid_gaps is \code{FALSE}. Default: 0.}
 #' }
 #' \describe{
 #'    \item{}{mg$get_params()}
@@ -134,20 +153,21 @@
 #' }
 #' \describe{
 #'    \item{}{get_raw_coverages = function(filenames)}
-#'    \item{filenames}{The name of the file to extract raw coverages. Can be
-#'                    the filename with the extension of the name of the bam
-#'                    file (if a named bam files was used during the creation
-#'                    of the metagene object). If \code{NULL}, returns the
-#'                    coverage of every bam files. Default: \code{NULL}.}
+#'    \item{filenames}{The name of the files from which raw coverages should
+#'                     be extracted. Can be the filenames with extensions or
+#'                     the bam names, if named bam files were used during the
+#'                     creation of the metagene object). If \code{NULL}, 
+#'                     returns the coverages for all bam files. Default: 
+#'                     \code{NULL}.}
 #' }
 #' \describe{
 #'    \item{}{get_normalized_coverages = function(filenames)}
-#'    \item{filenames}{The name of the file to extract normalized coverages 
-#'            (in RPM). Can be the filename with the extension of 
-#'            the name of the bam file (if a named bam files was used during
-#'            the creation of the metagene object). If \code{NULL},
-#'            returns the coverage every bam files. Default:
-#'            \code{NULL}.}
+#'    \item{filenames}{The name of the files from which normalized coverages
+#'                     (in RPM)  should be extracted. Can be the filenames with
+#'                     extensions or the bam names, if named bam files were 
+#'                     used during the creation of the metagene object). If 
+#'                     \code{NULL}, returns the coverages for all bam files. 
+#'                     Default: \code{NULL}.}
 #' }
 #' \describe{
 #'    \item{}{\code{mg$export(bam_file, region, file)}}
@@ -157,12 +177,12 @@
 #' }
 #' \describe{
 #'    \item{}{\code{mg$add_design(design = NULL, check_bam_files = FALSE)}}
-#'    \item{design}{A \code{data.frame} that describe to experiment to plot.
+#'    \item{design}{A \code{data.frame} that describes the experiment to plot.
 #'            See \code{plot} function for more details. \code{NA} can be
-#'            used keep previous design value. Default: \code{NA}.}
-#'    \item{check_bam_files}{Force check that all the bam files from the first
-#'                            columns of the design are present in current
-#'                            metagene object. Default: \code{FALSE}}
+#'            used to keep the previous design value. Default: \code{NA}.}
+#'    \item{check_bam_files}{Force check that all bam files from the first
+#'                           column of the design are present in the current
+#'                           metagene object. Default: \code{FALSE}}
 #' }
 #' \describe{
 #'    \item{}{\code{mg$unflip_regions()}}
@@ -171,10 +191,6 @@
 #' \describe{
 #'    \item{}{\code{mg$flip_regions()}}
 #' }
-#' \describe{
-#'    \item{}{\code{mg$unflip_regions()}}
-#' }
-#'
 #' @examples
 #' region <- get_demo_regions()[1]
 #' bam_file <- get_demo_bam_files()[1]
@@ -217,7 +233,6 @@ metagene <- R6Class("metagene",
             private$params[["assay"]] <- tolower(assay)
             private$params[["df_needs_update"]] <- TRUE
             private$params[["df_arguments"]] <- ""
-            private$params[["table_needs_update"]] <- TRUE
             private$params[["table_needs_update"]] <- TRUE
             
             # Prepare bam files
@@ -404,7 +419,7 @@ metagene <- R6Class("metagene",
                     # here the word 'gene' = 'region'
                     bam_files_names <- names(private$params[["bam_files"]])
 
-                    # useful variables for caculations of 
+                    # useful variables for calculations of 
                     # standard data table structure (std_dt_struct)
                     gene_count <- length(private$regions)
                     gene_names <- names(private$regions)
@@ -416,96 +431,96 @@ metagene <- R6Class("metagene",
                                                                 numeric(1))
                     
                     ## standard data table structure for one replicat
-                        col_gene <- rep(gene_names, times=unlist(map(
-                                1:gene_count, 
-                                ~sum(exon_length_by_exon_by_gene[[
-                                                            gene_names[.x]]]))))
+                    col_gene <- rep(gene_names, times=unlist(map(
+                            1:gene_count, 
+                            ~sum(exon_length_by_exon_by_gene[[
+                                                        gene_names[.x]]]))))
 
-                        exon_names <- unlist(map(exon_count_by_gene, ~ 1:.x))
-                        col_exon <- as.vector(rep(exon_names, 
-                                    times=unlist(exon_length_by_exon_by_gene)))
-                                    
-                        col_exon_size <- rep(as.vector(#useful for flip function
-                                unlist(exon_length_by_exon_by_gene)), 
-                                times=as.vector(unlist(
-                                    exon_length_by_exon_by_gene)))
-                                    
-                        gene_size <- unlist(map(1:length(self$get_regions()), 
-                                        ~sum(width(self$get_regions()[[.x]]))))
-                        col_gene_size <- rep(gene_size, times = gene_size)
-                        
-                        gene_length_cum <- c(0,
-                                    cumsum(gene_size)[-length(gene_size)])+1
-                        col_gene_start_nuc <- rep(gene_length_cum, 
-                                                            times = gene_size)
-                        
-                        col_nuc <- unlist(map(as.vector(unlist(
-                                    exon_length_by_exon_by_gene_cum)), ~ 1:.x))
-                        
-                        exon_strand_by_exon_by_gene <- unlist(map(gene_names, 
-                                    ~as.vector(strand(private$regions[[.x]]))))
-                        col_strand <- as.vector(rep(exon_strand_by_exon_by_gene,
-                                    times=unlist(exon_length_by_exon_by_gene)))
+                    exon_names <- unlist(map(exon_count_by_gene, ~ 1:.x))
+                    col_exon <- as.vector(rep(exon_names, 
+                                times=unlist(exon_length_by_exon_by_gene)))
+                                
+                    col_exon_size <- rep(as.vector(#useful for flip function
+                            unlist(exon_length_by_exon_by_gene)), 
+                            times=as.vector(unlist(
+                                exon_length_by_exon_by_gene)))
+                                
+                    gene_size <- unlist(map(1:length(self$get_regions()), 
+                                    ~sum(width(self$get_regions()[[.x]]))))
+                    col_gene_size <- rep(gene_size, times = gene_size)
                     
-                        
-                        length_std_dt_struct = length(col_gene)
+                    gene_length_cum <- c(0,
+                                cumsum(gene_size)[-length(gene_size)])+1
+                    col_gene_start_nuc <- rep(gene_length_cum, 
+                                                        times = gene_size)
+                    
+                    col_nuc <- unlist(map(as.vector(unlist(
+                                exon_length_by_exon_by_gene_cum)), ~ 1:.x))
+                    
+                    exon_strand_by_exon_by_gene <- unlist(map(gene_names, 
+                                ~as.vector(strand(private$regions[[.x]]))))
+                    col_strand <- as.vector(rep(exon_strand_by_exon_by_gene,
+                                times=unlist(exon_length_by_exon_by_gene)))
+                
+                    
+                    length_std_dt_struct = length(col_gene)
 
-                        # the number of not empty cases in the design param
-                        copies_count <- sum(replace(unlist(design[,-1]),
-                                    which(unlist(design[,-1]) == 2),1))
+                    # the number of not empty cases in the design param
+                    copies_count <- sum(replace(unlist(design[,-1]),
+                                which(unlist(design[,-1]) == 2),1))
 
-                        #multiplication of standard data table structure
-                        col_gene <- rep(col_gene, copies_count)
-                        col_exon <- rep(col_exon, copies_count)
-                        col_nuctot <- 1:length(col_nuc)
-                        col_nuctot <- rep(col_nuctot, copies_count)
-                        col_nuc <- rep(col_nuc, copies_count)
-                        col_exon_size <- rep(col_exon_size, copies_count)
-                        col_gene_size <- rep(col_gene_size, copies_count)
-                        col_strand <- rep(col_strand, copies_count)
-                        col_gene_start_nuc <- rep(col_gene_start_nuc, 
-                                                            copies_count)
+                    #multiplication of standard data table structure
+                    col_gene <- rep(col_gene, copies_count)
+                    col_exon <- rep(col_exon, copies_count)
+                    col_nuctot <- 1:length(col_nuc)
+                    col_nuctot <- rep(col_nuctot, copies_count)
+                    col_nuc <- rep(col_nuc, copies_count)
+                    col_exon_size <- rep(col_exon_size, copies_count)
+                    col_gene_size <- rep(col_gene_size, copies_count)
+                    col_strand <- rep(col_strand, copies_count)
+                    col_gene_start_nuc <- rep(col_gene_start_nuc, 
+                                                        copies_count)
                         
                     ## other columns of data table
-                        design_names <- colnames(design)[-1]
-                        bam_names_in_design <- tools::file_path_sans_ext(
-                                                            basename(design[,1]))
+                    design_names <- colnames(design)[-1]
+                    bam_names_in_design <- tools::file_path_sans_ext(
+                                                        basename(design[,1]))
 
-                        bfile_names_by_design <- tools::file_path_sans_ext(
-                            unlist(map(design_names , 
-                                ~design[which(design[,
-                                    which(colnames(
-                                        design) == .x)] > 0),1])))
-                        col_bam <- rep(bfile_names_by_design,
-                                each=length_std_dt_struct)
-                        
-                        nb_bfile_by_design <- unlist(map(design_names , 
-                                ~length(which(design[,which(
-                                colnames(design) == .x)] > 0))))
-                        col_design <- rep(design_names,
-                                    times=(nb_bfile_by_design *
-                                        length_std_dt_struct))
-                        
-                        ## col_values
-                        #NB : lapply(Views...) -> out of limits of view
-                        grtot <- self$get_regions()
-                        col_values <- list()
-                        idx <- 1 #index for col_values list
-                        idx_sd_loop <- 1 
-                        for(bam in bam_names_in_design) {
-                            for (i in 1:length(grtot)){
-								gr <- grtot[[i]]
-								sq <- unique(as.character(seqnames(gr)))
-                                val <- Views(
-                                    coverages[[bam]][[sq]], 
-                                    start(gr), 
-                                    end(gr))
-                                col_values[[idx]] <- unlist(lapply(
-                                val, as.numeric))
-                                idx <- idx + 1
-                            }
+                    bfile_names_by_design <- tools::file_path_sans_ext(
+                        unlist(map(design_names , 
+                            ~design[which(design[,
+                                which(colnames(
+                                    design) == .x)] > 0),1])))
+                    col_bam <- rep(bfile_names_by_design,
+                            each=length_std_dt_struct)
+                    
+                    nb_bfile_by_design <- unlist(map(design_names , 
+                            ~length(which(design[,which(
+                            colnames(design) == .x)] > 0))))
+                    col_design <- rep(design_names,
+                                times=(nb_bfile_by_design *
+                                    length_std_dt_struct))
+                    
+                    ## col_values
+                    #NB : lapply(Views...) -> out of limits of view
+                    grtot <- self$get_regions()
+                    col_values <- list()
+                    idx <- 1 #index for col_values list
+                    idx_sd_loop <- 1 
+                    for(bam in bam_names_in_design) {
+                        for (i in 1:length(grtot)){
+                            gr <- grtot[[i]]
+                            sq <- unique(as.character(seqnames(gr)))
+                            val <- Views(
+                                coverages[[bam]][[sq]], 
+                                start(gr), 
+                                end(gr))
+                            col_values[[idx]] <- unlist(lapply(
+                            val, as.numeric))
+                            idx <- idx + 1
                         }
-                        col_values <- unlist(col_values)
+                    }
+                    col_values <- unlist(col_values)
                     
                     if (!is.null(bin_count)) {
                         message('produce data table : RNA-Seq binned')
@@ -888,6 +903,16 @@ metagene <- R6Class("metagene",
                 stop(paste0("regions must be either a vector of BED ",
                     "filenames, a GRanges object or a GrangesList object"))
             }
+            if(assay=="rnaseq" && is(regions, "GRanges")) {
+                if(length(unique(seqnames(regions))) > 1) {
+                    stop(paste0("for rnaseq assays, regions should be a ",
+                                "GRangesList of transcripts, or a GRanges ",
+                                " object representing a single transcript. ",
+                                "Here regions spans several seqnames, indicating ",
+                                "it might include many transcripts."))
+                }
+            }
+            
             # Validation specific to regions as a vector
             if (is.character(regions) && !all(sapply(regions, file.exists))) {
                 stop("regions must be a list of existing BED files")

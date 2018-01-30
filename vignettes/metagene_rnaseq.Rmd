@@ -4,7 +4,7 @@ output:
     BiocStyle::html_document:
         toc: true
 vignette: >
-    %\VignetteIndexEntry{Introduction to metagene}
+    %\VignetteIndexEntry{Introduction to metagene's RNA-Seq analysis}
     %\VignetteEngine{knitr::rmarkdown}
     \usepackage[utf8]{inputenc}
 ---
@@ -21,16 +21,16 @@ library(knitr)
 
 # Introduction
 
-This experimental extension of metagene allows to use metagene to analyse 
-RNA-Seq data. The quantification at the gene level of RNA-seq experiment is done
-directly from the profile of coverages and the differential expression level can 
-be done via the similaRpeak package in order to compare profile of coverages.
-Design experiment can take into account multiple replicates divided into several
-groups of samples. As done by metagene in ChIP-Seq analysis, this experimental 
-extension uses bootstrap to obtain a better estimation of the mean enrichment 
-and the confidence interval for every group of samples.
+This experimental functionality of metagene extends the use metagene to RNA-Seq
+data analysis. Gene-level quantification of the RNA-seq experiment is performed
+directly from coverage profiles, and differential expression can be assessed
+using the similaRpeak package.
+Experimental designs can account for multiple replicates divided into several
+groups of samples. Similarly to the analysis of ChIP-Seq data by metagene, 
+bootstrap procedures are used to obtain a better estimate of the mean enrichment 
+and of the confidence interval for every group of samples.
 
-This vignette will introduce all the main features of the metagene RNA-seq 
+This vignette introduces all of the main features of the metagene RNA-seq 
 extension.
 
 # Loading the metagene package
@@ -43,12 +43,13 @@ library(metagene)
 
 ## Alignment files (BAM files)
 
-There is no hard limit in the number of BAM files that can be included in an
-analysis (but with too many BAM files, memory may become an issue). BAM files
-must be indexed. For instance, if you use a file names `file.bam`, a file
-named `file.bam.bai` or `file.bai` must be present in the same directory.
+There is no hard limit to the number of BAM files that can be included in an
+analysis, though memory usage might become an issue when large numbers of BAM 
+files are analyzed at once. All provided BAM files must be indexed: the BAM
+`file.bam` should have an accompanying `file.bam.bai` or `file.bai` index file
+in the same directory.
 
-The path (relative or absolute) to the BAM files must be in a vector:
+The paths (relative or absolute) to the BAM files must be in a vector:
 ```{r bamFiles}
 bam_files <- 
 c(system.file("extdata/cyto4.bam", package="metagene"),
@@ -56,19 +57,19 @@ c(system.file("extdata/cyto4.bam", package="metagene"),
   system.file("extdata/nuc4.bam", package="metagene"),
   system.file("extdata/nuc3.bam", package="metagene"))
 ```
-The possibility to use BAM file from single-ended of pair-ended RNA-seq 
-experiment is available (see below)
+BAM file from both single-end of paired-end RNA-seq experiments might be used
+(see below for details)
 
 ## Genomic regions
 
 ### BED files
 
 To compare custom regions of interest, it is possible to use a list of one or
-more BED files. Here, we use three genes. The name of the files (without the 
+more BED files. Here, two genes are used. The name of the files (without the 
 extension) will be used to name each gene. 
-CAUTION : one BED files must be provided by gene of interest. Ranges into BED 
-files must be the ranges of exons for this gene. (See for instance the 
-'DPM1.bed' BED file into 'metagene/inst/extdata').
+**Each gene of interest must be in its own BED file.** Ranges within 
+the BED files will be interpreted as exons within that gene. For example, 
+see the 'DPM1.bed' BED file in 'metagene/inst/extdata'.
 
 ```{r regionsArgument}
 regions <- 
@@ -77,19 +78,22 @@ system.file("extdata/NDUFAB1.bed", package="metagene"))
 ```
 ### GRanges or GRangesList objects - Regions
 
-As an alternative to a list of BED files, `GRangesList` objects 
-can be used. CAUTION : elements of the `GRangesList` must be the genes of 
-interest and ranges into each elements of the `GRangesList` must be the exons
-regions. You get an example of this with the regions `GRangesList` object 
-above in the BED files section.
+As an alternative to a list of BED files, An object of type `GRangesList`
+can be used to specify genes of interest. Each element of the `GRangesList` must 
+be a gene of interest, its component `GRanges` describing its exons.
 
 ## Design groups
 
-A design group contains a set of BAM files that, when put together, represent
-a logical analysis. Furthermore, a design group contains the relationship
-between every BAM files present.
+An experimental design describes the set of BAM files to be used
+during the metagene analysis, and their relationships to one another.
+An experimental design's first column should provide the paths to the BAM files
+to be analyzed. Subsequent columns should describe design groups using the
+following values:
+    + 0: ignore file
+    + 1: input
+    + 2: control
 
-For instance, the design could be created directly from R.
+As an example, a design could be created directly from R code:
 
 ```{r DesignCraft}
 Samples <- c("cyto4.bam",
@@ -107,20 +111,21 @@ mydesign$nucleo <- nucleo
 
 # Analysis steps
 
-A typical metagene analysis will consist steps:
+A typical metagene analysis will consist of the following steps:
 
-* Extraction the read count of every BAM files in selected regions.
-* Conversion in coverage.
+* Extraction of the read counts of every BAM files in selected regions.
+* Conversion into coverages.
 * Normalization of the coverage values.
 * Table production.
 * Data frame production.
 * Generation of the metagene plot.
 * Profile comparison (differential expression)
 
-## Creation of a metagene object for RNA-seq analysis
+## Creation of a metagene object for an RNA-seq analysis
 
-Two new arguments were introduced : paired_end and assay. Data used here came
-from the ENCSR000CPJ and ENCSR000CPK experiments (ENCODE) using paired-end 
+Two new arguments are introduced to the metagene constructor for RNA-Seq support:
+paired_end and assay. Data used in the following example were obtained 
+from the ENCODE experiments ENCSR000CPJ and ENCSR000CPK, using paired-end 
 polyA mRNA RNA-seq.
 
 ```{r new metagene_rnaseq object, warnings = FALSE}
@@ -137,23 +142,24 @@ mg$produce_table(normalization = 'RPM')
 mg$produce_data_frame()
 mg$plot(title = 'DPM1')
 ```
-Dashed lines strand for exon separations.
-
-NOTE : in paired_end, a warning message could appear to warn you about how many 
-alignments with ambiguous pairing were dumped.
-
-As you can see, it is not mandatory to explicitly call each step of the 
-metagene analysis. For instance, in the previous example, the `plot` function 
-call the other steps automatically with default values (the next section will 
-describe the steps in more details).
-
-The plot displayed shows the coverage of the gene DPM1 for the bam file 
-nuc4.bam. Coverage is expressed in raw, because by default 
-it is not normalized and orientation here is from 3' to 5' (to 0 from 1250 on 
-horizontal axis) because of the strand orientation of the gene in BED files.
+The plot shows the coverage in Reads-per-million(RPM) of the gene DPM1 
+for the bam file nuc4.bam. The x-axis is orientated from 3' to 5' (from 0 from 1250)
+because of the strand orientation of the gene in the input BED file.
 
 However, you can control normalization, flip and other arguments provided in 
 produce_table and produce_data_frame methods. Let's see that together.
+The dashed lines represent exon frontiers.
+
+NOTE: in paired_end, a warning message could appear to warn you about how many 
+alignments with ambiguous pairing were dumped.
+
+It is not mandatory to explicitly call each step of the 
+metagene analysis. For instance, in the previous example, the `plot` function 
+could have been called directly, and would have called all other intermediary 
+steps automatically using default values. The next section will describe those
+steps in more details.
+
+
 
 ## Complete analysis
 
