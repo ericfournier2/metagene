@@ -83,7 +83,8 @@ Bam_Handler <- R6Class("Bam_Handler",
     public = list(
         parameters = list(),
         initialize = function(bam_files, cores = SerialParam(), 
-                                                        paired_end = FALSE) {
+                              paired_end = FALSE, strand_specific=FALSE,
+                              paired_end_strand_mode=2) {
             # Check prerequisites
             # bam_files must be a vector of BAM filenames
             if (!is.vector(bam_files, "character")) {
@@ -127,6 +128,9 @@ Bam_Handler <- R6Class("Bam_Handler",
             private$parallel_job <- Parallel_Job$new(cores)
             self$parameters[["cores"]] <- private$parallel_job$get_core_count()
             self$parameters[["paired_end"]] <- paired_end
+            self$parameters[["strand_specific"]] <- strand_specific
+            self$parameters[["paired_end_strand_mode"]] <- paired_end_strand_mode
+            
             private$bam_files <- data.frame(bam = bam_files,
                                             stringsAsFactors = FALSE)
             if (is.null(names(bam_files))) {
@@ -197,7 +201,9 @@ Bam_Handler <- R6Class("Bam_Handler",
             regions <- private$prepare_regions(regions, bam_file,
                                                 force_seqlevels)
             private$extract_coverage_by_regions(regions, bam_file, 
-                                paired_end = self$parameters[['paired_end']])
+                                paired_end = self$parameters[['paired_end']],
+                                strand_specific = self$parameters[['strand_specific']],
+                                paired_end_strand_mode = self$parameters[['paired_end_strand_mode']])
         },
         get_normalized_coverage = function(bam_file, regions,
                             force_seqlevels = FALSE) {
@@ -206,7 +212,9 @@ Bam_Handler <- R6Class("Bam_Handler",
                                                 force_seqlevels)
             count <- self$get_aligned_count(bam_file)
             private$extract_coverage_by_regions(regions, bam_file, count,
-                                paired_end = self$parameters[['paired_end']])
+                                paired_end = self$parameters[['paired_end']],
+                                strand_specific = self$parameters[['strand_specific']],
+                                paired_end_strand_mode = self$parameters[['paired_end_strand_mode']])
         },
         get_noise_ratio = function(chip_bam_names, input_bam_names) {
             lapply(c(chip_bam_names, input_bam_names), private$check_bam_file)
@@ -358,17 +366,52 @@ Bam_Handler <- R6Class("Bam_Handler",
             # The regions must not be overlapping
             reduce(regions)
         },
-        extract_coverage_by_regions = function(regions, bam_file, count=NULL, 
-                                                        paired_end = FALSE){
-            if(!paired_end){
-                param <- Rsamtools:::ScanBamParam(which=reduce(regions))
-                alignment <- GenomicAlignments:::readGAlignments(bam_file,
-                                                                param=param)
+        read_alignments = function(regions, bam_file, strand=NULL, 
+                                   paired_end=FALSE, paired_end_strand_mode=2) {
+            # Subset regions according to strand and determine the value
+            # passed to scanBamFlag's isMinusStrand.
+            if(!is.null(strand)) {
+                regions = regions[strand(regions)==strand]
+                strand_flag = c('+'=FALSE, '-'=TRUE, '*'=NA)[strand]
             } else {
-                param <- Rsamtools:::ScanBamParam(which=reduce(regions))
-                alignment <- GenomicAlignments:::readGAlignmentPairs(bam_file,
-                                                                param=param)
+                strand_flag = NA
             }
+            
+            if(length(regions) > 0) {
+                # Build a ScanBamParam object using the correct regions
+                # and the correct strand.
+                scan_flag = Rsamtools:::scanBamFlag(isMinusStrand=strand_flag)
+                param <- Rsamtools:::ScanBamParam(which=reduce(regions), flag=scan_flag)
+                
+                # Read alignments.
+                if(!paired_end) {
+                    alignment <- GenomicAlignments:::readGAlignments(bam_file, param=param)
+                } else {
+                    alignment <- GenomicAlignments:::readGAlignmentPairs(bam_file, param=param,
+                                                                         strandMode=paired_end_strand_mode)
+                }
+            } else {
+                # If there are no regions, build an empty alignment object.
+                # By default, passing an empty region set to 
+                # GenomicAlignments:::readGAlignments returns all alignments.
+                alignment <- GenomicAlignments::GAlignments()
+            }            
+                
+            return(alignment)
+        },
+        extract_coverage_by_regions = function(regions, bam_file, count=NULL, 
+                                               paired_end = FALSE,
+                                               strand_specific=FALSE,
+                                               paired_end_strand_mode=2){
+            if(!strand_specific) {
+                alignment = read_alignments(regions, bam_file, ...)
+            } else {
+                # Read regions on each strand separately.
+                alignment = c(read_alignments(regions, bam_file, '+', ...),
+                              read_alignments(regions, bam_file, '-', ...),
+                              read_alignments(regions, bam_file, '*', ...))
+            }
+                
             if (!is.null(count)) {
                 weight <- 1 / (count / 1000000)
                 GenomicAlignments::coverage(alignment) * weight

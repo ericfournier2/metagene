@@ -194,7 +194,8 @@ metagene <- R6Class("metagene",
         initialize = function(regions, bam_files, padding_size = 0,
                                 cores = SerialParam(), verbose = FALSE,
                                 force_seqlevels = FALSE, paired_end = FALSE,
-                                assay = 'chipseq') {
+                                assay = 'chipseq', strand_specific=FALSE,
+                                paired_end_strand_mode=2) {
             # Check params...
             private$check_param(regions = regions, bam_files = bam_files,
                                 padding_size = padding_size,
@@ -217,11 +218,14 @@ metagene <- R6Class("metagene",
             private$params[["df_needs_update"]] <- TRUE
             private$params[["df_arguments"]] <- ""
             private$params[["table_needs_update"]] <- TRUE
+            private$params[["table_needs_update"]] <- TRUE
             
             # Prepare bam files
             private$print_verbose("Prepare bam files...")
             private$bam_handler <- Bam_Handler$new(bam_files, cores = cores,
-                                        paired_end = paired_end)
+                                        paired_end = paired_end,
+                                        strand_specific=strand_specific,
+                                        paired_end_strand_mode=paired_end_strand_mode)
 
             # Prepare regions
             private$print_verbose("Prepare regions...")
