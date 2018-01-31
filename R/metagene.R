@@ -360,12 +360,18 @@ metagene <- R6Class("metagene",
             }
         },
         get_normalized_coverages = function(filenames = NULL) {
+            # Define a function which will normalize coverage for a single
+            # BAM file.
             normalize_coverage <- function(filename) {
-            count <- private$bam_handler$get_aligned_count(filename)
-                weight <- 1 / (count / 1000000)
-                coverages[[filename]] <- coverages[[filename]] * weight
+                count <- private$bam_handler$get_aligned_count(filename)
+                    weight <- 1 / (count / 1000000)
+                    coverages[[filename]] <- coverages[[filename]] * weight
             }
+            
+            # Get the raw coverages.
             coverages <- self$get_raw_coverages(filenames)
+            
+            # Calculate normalized coverages in parallel.
             coverage_names <- names(coverages)
             coverages <-
                 private$parallel_job$launch_job(data = coverage_names,
@@ -397,7 +403,7 @@ metagene <- R6Class("metagene",
                                                     "noise_removal")
             normalization <- private$get_param_value(normalization,
                                                     "normalization")
-            coverages <- private$coverages
+            
 
             #addition of private$params[["table_needs_update"]] comes from 
             #troubles in table update when adding a design with the add_design
@@ -410,8 +416,10 @@ metagene <- R6Class("metagene",
                                     private$params[["table_needs_update"]]) {
                 
                 if (!is.null(normalization)) {
-                    coverages <- private$normalize_coverages(coverages)
+                    coverages <- self$get_normalized_coverages()
                     message('Normalization done')
+                } else {
+                    coverages <- self$get_raw_coverages()
                 }
                 
                 if (private$params[['assay']] == 'rnaseq'){
@@ -1222,19 +1230,6 @@ metagene <- R6Class("metagene",
                 }
             }
             results
-        },
-        normalize_coverages = function(coverages) {
-            bam_names <- unlist(lapply(private$bam_handler$get_bam_files()$bam, 
-                                private$bam_handler$get_bam_name))
-            for (bam_name in bam_names) {
-                #which_rows = design[[design_name]]==1
-                #bam_files <- as.character(design[,1][which_rows])
-                count <- private$bam_handler$get_aligned_count(bam_name)
-                #count <- sum(unlist(counts))
-                weight <- 1 / (count / 1000000)
-                coverages[[bam_name]] <-    coverages[[bam_name]] * weight
-            }
-            coverages
         },
         merge_chip = function(coverages, design) {
             result <- list()
