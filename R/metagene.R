@@ -364,8 +364,8 @@ metagene <- R6Class("metagene",
             count <- private$bam_handler$get_aligned_count(filename)
                 weight <- 1 / (count / 1000000)
                 coverages[[filename]] <- coverages[[filename]] * weight
-        }
-        coverages <- self$get_raw_coverages(filenames)
+            }
+            coverages <- self$get_raw_coverages(filenames)
             coverage_names <- names(coverages)
             coverages <-
                 private$parallel_job$launch_job(data = coverage_names,
@@ -430,7 +430,7 @@ metagene <- R6Class("metagene",
                     exon_count_by_gene <- vapply(private$regions, length, 
                                                                 numeric(1))
                     
-                    ## standard data table structure for one replicat
+                    ## standard data table structure for one replicate
                     col_gene <- rep(gene_names, times=unlist(map(
                             1:gene_count, 
                             ~sum(exon_length_by_exon_by_gene[[
@@ -1201,10 +1201,10 @@ metagene <- R6Class("metagene",
             for (design_name in colnames(design)[-1]) {
                 i <- design[[design_name]] == 1
                 j <- design[[design_name]] == 2
-            chip_bam_files <- as.character(design[,1][i])
-            chip_names <- private$get_bam_names(chip_bam_files)
+                chip_bam_files <- as.character(design[,1][i])
+                chip_names <- private$get_bam_names(chip_bam_files)
                 input_bam_files <- as.character(design[,1][j])
-            input_names <- private$get_bam_names(input_bam_files)
+                input_names <- private$get_bam_names(input_bam_files)
                 chip_coverages <- coverages[chip_names]
                 chip_coverages <- Reduce("+", chip_coverages)
                 if (length(input_bam_files) > 0) {
