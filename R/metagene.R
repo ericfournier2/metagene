@@ -1207,26 +1207,25 @@ metagene <- R6Class("metagene",
         remove_controls = function(coverages, design) {
             results <- list()
             for (design_name in colnames(design)[-1]) {
-                i <- design[[design_name]] == 1
-                j <- design[[design_name]] == 2
-                chip_bam_files <- as.character(design[,1][i])
-                chip_names <- private$get_bam_names(chip_bam_files)
-                input_bam_files <- as.character(design[,1][j])
-                input_names <- private$get_bam_names(input_bam_files)
-                chip_coverages <- coverages[chip_names]
-                chip_coverages <- Reduce("+", chip_coverages)
-                if (length(input_bam_files) > 0) {
+                # Add up coverage for all ChIP and all input bams.
+                chip_results <- private$merge_reduce(coverages, design, design_name, 1)
+                input_results <- private$merge_reduce(coverages, design, design_name, 2)
+                
+                
+                if (length(input_results$BamNames) > 0) {
+                    # If we had input bams, perform noise reduction.
                     noise_ratio <-
-                        private$bam_handler$get_noise_ratio(chip_names,
-                                                            input_names)
-                    input_coverages <- coverages[input_names]
-                    input_coverages <- noise_ratio * Reduce("+",
-                                                            input_coverages)
-                    results[design_name] <- chip_coverages - input_coverages
+                        private$bam_handler$get_noise_ratio(chip_results$BamNames,
+                                                            input_results$BamNames)
+                    results[design_name] <- chip_results$Coverage - (input_results$Coverage * noise_ratio)
+                    
+                    # When input signal is stronger than the chip's, we'll get
+                    # negative values. Set the value floor to 0.
                     i <- results[[design_name]] < 0
                     results[[design_name]][i] <- 0
                 } else {
-                    results[design_name] <- chip_coverages
+                    # If we had no input bams, return coverage as-is.
+                    results[design_name] <- chip_results$Coverage
                 }
             }
             results
@@ -1234,14 +1233,18 @@ metagene <- R6Class("metagene",
         merge_chip = function(coverages, design) {
             result <- list()
             for (design_name in colnames(design)[-1]) {
-                i <- design[[design_name]] == 1
-                bam_files <- as.character(design[,1][i])
-            bam_names <- private$get_bam_names(bam_files)
-                cov <- coverages[bam_names]
-                result[[design_name]] <- Reduce("+", cov)
+                result[[design_name]] <- private$merge_reduce(coverages, design, design_name, 1)$Coverage
             }
             result
         },
+        merge_reduce = function(coverages, design, design_name, design_value) {
+            indices = design[[design_name]] == design_value
+            bam_files <- as.character(design[,1][indices])
+            bam_names <- private$get_bam_names(bam_files)
+            
+            list(Coverage=Reduce("+", coverages[bam_names]),
+                 BamNames=bam_names)
+        }
         flip_table = function() {
             if(!all(private$table[,length(levels(as.factor(strand))), 
                                     by=region][,2] == 1) &
