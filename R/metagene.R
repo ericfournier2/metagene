@@ -1244,7 +1244,7 @@ metagene <- R6Class("metagene",
             
             list(Coverage=Reduce("+", coverages[bam_names]),
                  BamNames=bam_names)
-        }
+        },
         flip_table = function() {
             if(!all(private$table[,length(levels(as.factor(strand))), 
                                     by=region][,2] == 1) &

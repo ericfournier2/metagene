@@ -197,12 +197,12 @@ Bam_Handler <- R6Class("Bam_Handler",
             private$bam_files
         },
         get_coverage = function(bam_file, regions, force_seqlevels = FALSE) {
-            private$private_get_coverage(bam_file, regions, force_seqlevels)
+            private$generic_get_coverage(bam_file, regions, force_seqlevels)
         },
         get_normalized_coverage = function(bam_file, regions,
                             force_seqlevels = FALSE) {
             count <- self$get_aligned_count(bam_file)
-            private$private_get_coverage(bam_file, regions, force_seqlevels, count)
+            private$generic_get_coverage(bam_file, regions, force_seqlevels, count)
                             private$check_bam_file(bam_file)
         },
         get_noise_ratio = function(chip_bam_names, input_bam_names) {
@@ -417,7 +417,7 @@ Bam_Handler <- R6Class("Bam_Handler",
                 GenomicAlignments::coverage(alignment)
             }
         },
-        generic_get_coverage <- function(bam_file, regions, force_seqlevels = FALSE, count=NULL) {
+        generic_get_coverage = function(bam_file, regions, force_seqlevels = FALSE, count=NULL) {
             private$check_bam_file(bam_file)
             regions <- private$prepare_regions(regions, bam_file,
                                                 force_seqlevels)
