@@ -242,7 +242,7 @@ metagene <- R6Class("metagene",
             # Parse bam files
             private$print_verbose("Parse bam files...\n")
             private$print_verbose("coverages...\n")
-            private$coverages <- private$produce_coverages()        
+            private$coverages <- private$produce_coverages()    
         },
         get_bam_count = function(filename) {
             # Parameters validation are done by Bam_Handler object
@@ -357,14 +357,41 @@ metagene <- R6Class("metagene",
             count <- private$bam_handler$get_aligned_count(filename)
                 weight <- 1 / (count / 1000000)
                 coverages[[filename]] <- coverages[[filename]] * weight
-        }
-        coverages <- self$get_raw_coverages(filenames)
+            }
+            coverages <- self$get_raw_coverages(filenames)
             coverage_names <- names(coverages)
             coverages <-
                 private$parallel_job$launch_job(data = coverage_names,
                                                 FUN = normalize_coverage)
             names(coverages) <- coverage_names
             coverages
+        },
+        get_design_coverages = function(design=NA, noise_removal=NA, normalization=NA) {
+            if(length(private$design_coverages)==0) {
+                # Get the correct parameters.
+                design <- private$fetch_design(design)
+                noise_removal = private$get_param_value(noise_removal, "noise_removal")
+                normalization <- private$get_param_value(normalization, "normalization")
+                
+                # Get raw coverages
+                coverages <- private$coverages
+                
+                # Normalize if required.
+                if (!is.null(normalization)) {
+                    coverages <- private$normalize_coverages(coverages)
+                    message('Normalization done')
+                }
+                
+                # Merge the various samples, removing noise if it was requested.
+                if (!is.null(noise_removal)) {
+                    coverages <- private$remove_controls(coverages, design)
+                } else {
+                    coverages <- private$merge_chip(coverages, design)
+                }
+            
+                private$design_coverages <- coverages
+            }
+            return(private$design_coverages)
         },
         add_design = function(design, check_bam_files = FALSE) {
             private$design = private$fetch_design(design, check_bam_files)
@@ -854,6 +881,7 @@ metagene <- R6Class("metagene",
         table = data.table(),
         design = data.frame(),
         coverages = list(),
+        design_coverages = list(),
         df = data.frame(),
         graph = "",
         bam_handler = "",
