@@ -406,25 +406,26 @@ metagene <- R6Class("metagene",
                 bin_size <- NULL
             }
 
-            design <- private$fetch_design(design)
-            private$check_produce_table_params(bin_count = bin_count,
-                                                bin_size = bin_size,
-                                                design = design,
-                                                noise_removal = noise_removal,
-                                                normalization = normalization,
-                                                flip_regions = flip_regions)
-            bin_count <- private$get_param_value(bin_count, "bin_count")
-            noise_removal <- private$get_param_value(noise_removal,
-                                                    "noise_removal")
-            normalization <- private$get_param_value(normalization,
-                                                    "normalization")
-            coverages <- private$coverages
-
             if (private$table_need_update(design = design,
-                                    bin_count = bin_count,
-                                    bin_size = bin_size,
-                                    noise_removal = noise_removal,
-                                    normalization = normalization)) {
+                                          bin_count = bin_count,
+                                          bin_size = bin_size,
+                                          noise_removal = noise_removal,
+                                          normalization = normalization)) {            
+            
+                design <- private$fetch_design(design)
+
+                bin_count <- private$get_param_value(bin_count, "bin_count")
+                noise_removal <- private$get_param_value(noise_removal, "noise_removal")
+                normalization <- private$get_param_value(normalization, "normalization")
+                                                        
+                private$check_produce_table_params(bin_count = bin_count,
+                                                   bin_size = bin_size,
+                                                   design = design,
+                                                   noise_removal = noise_removal,
+                                                   normalization = normalization,
+                                                   flip_regions = flip_regions)
+
+                coverages <- private$coverages
                 
                 if (!is.null(normalization)) {
                     coverages <- private$normalize_coverages(coverages)
@@ -447,97 +448,97 @@ metagene <- R6Class("metagene",
                     exon_count_by_gene <- vapply(private$regions, length, 
                                                                 numeric(1))
                     
-                    ## standard data table structure for one replicat
-                        col_gene <- rep(gene_names, times=unlist(map(
-                                1:gene_count, 
-                                ~sum(exon_length_by_exon_by_gene[[
-                                                            gene_names[.x]]]))))
+                    ## standard data table structure for one replicate
+                    col_gene <- rep(gene_names, times=unlist(map(
+                            1:gene_count, 
+                            ~sum(exon_length_by_exon_by_gene[[
+                                                        gene_names[.x]]]))))
 
-                        exon_names <- unlist(map(exon_count_by_gene, ~ 1:.x))
-                        col_exon <- as.vector(rep(exon_names, 
-                                    times=unlist(exon_length_by_exon_by_gene)))
-                                    
-                        col_exon_size <- rep(as.vector(#useful for flip function
-                                unlist(exon_length_by_exon_by_gene)), 
-                                times=as.vector(unlist(
-                                    exon_length_by_exon_by_gene)))
-                                    
-                        gene_size <- unlist(map(1:length(self$get_regions()), 
-                                        ~sum(width(self$get_regions()[[.x]]))))
-                        col_gene_size <- rep(gene_size, times = gene_size)
-                        
-                        gene_length_cum <- c(0,
-                                    cumsum(gene_size)[-length(gene_size)])+1
-                        col_gene_start_nuc <- rep(gene_length_cum, 
-                                                            times = gene_size)
-                        
-                        col_nuc <- unlist(map(as.vector(unlist(
-                                    exon_length_by_exon_by_gene_cum)), ~ 1:.x))
-                        
-                        exon_strand_by_exon_by_gene <- unlist(map(gene_names, 
-                                    ~as.vector(strand(private$regions[[.x]]))))
-                        col_strand <- as.vector(rep(exon_strand_by_exon_by_gene,
-                                    times=unlist(exon_length_by_exon_by_gene)))
+                    exon_names <- unlist(map(exon_count_by_gene, ~ 1:.x))
+                    col_exon <- as.vector(rep(exon_names, 
+                                times=unlist(exon_length_by_exon_by_gene)))
+                                
+                    col_exon_size <- rep(as.vector(#useful for flip function
+                            unlist(exon_length_by_exon_by_gene)), 
+                            times=as.vector(unlist(
+                                exon_length_by_exon_by_gene)))
+                                
+                    gene_size <- unlist(map(1:length(self$get_regions()), 
+                                    ~sum(width(self$get_regions()[[.x]]))))
+                    col_gene_size <- rep(gene_size, times = gene_size)
                     
-                        
-                        length_std_dt_struct = length(col_gene)
+                    gene_length_cum <- c(0,
+                                cumsum(gene_size)[-length(gene_size)])+1
+                    col_gene_start_nuc <- rep(gene_length_cum, 
+                                                        times = gene_size)
+                    
+                    col_nuc <- unlist(map(as.vector(unlist(
+                                exon_length_by_exon_by_gene_cum)), ~ 1:.x))
+                    
+                    exon_strand_by_exon_by_gene <- unlist(map(gene_names, 
+                                ~as.vector(strand(private$regions[[.x]]))))
+                    col_strand <- as.vector(rep(exon_strand_by_exon_by_gene,
+                                times=unlist(exon_length_by_exon_by_gene)))
+                    
+                    
+                    length_std_dt_struct = length(col_gene)
 
-                        # the number of not empty cases in the design param
-                        copies_count <- sum(replace(unlist(design[,-1]),
-                                    which(unlist(design[,-1]) == 2),1))
+                    # the number of not empty cases in the design param
+                    copies_count <- sum(replace(unlist(design[,-1]),
+                                which(unlist(design[,-1]) == 2),1))
 
-                        #multiplication of standard data table structure
-                        col_gene <- rep(col_gene, copies_count)
-                        col_exon <- rep(col_exon, copies_count)
-                        col_nuctot <- 1:length(col_nuc)
-                        col_nuctot <- rep(col_nuctot, copies_count)
-                        col_nuc <- rep(col_nuc, copies_count)
-                        col_exon_size <- rep(col_exon_size, copies_count)
-                        col_gene_size <- rep(col_gene_size, copies_count)
-                        col_strand <- rep(col_strand, copies_count)
-                        col_gene_start_nuc <- rep(col_gene_start_nuc, 
+                    #multiplication of standard data table structure
+                    col_gene <- rep(col_gene, copies_count)
+                    col_exon <- rep(col_exon, copies_count)
+                    col_nuctot <- 1:length(col_nuc)
+                    col_nuctot <- rep(col_nuctot, copies_count)
+                    col_nuc <- rep(col_nuc, copies_count)
+                    col_exon_size <- rep(col_exon_size, copies_count)
+                    col_gene_size <- rep(col_gene_size, copies_count)
+                    col_strand <- rep(col_strand, copies_count)
+                    col_gene_start_nuc <- rep(col_gene_start_nuc, 
                                                             copies_count)
                         
                     ## other columns of data table
-                        design_names <- colnames(design)[-1]
-                        bam_names_in_design <- tools::file_path_sans_ext(
-                                                            design[,1])
+                    design_names <- colnames(design)[-1]
+                    bam_names_in_design <- tools::file_path_sans_ext(
+                                                        design[,1])
 
-                        bfile_names_by_design <- tools::file_path_sans_ext(
-                            unlist(map(design_names , 
-                                ~design[which(design[,
-                                    which(colnames(
-                                        design) == .x)] > 0),1])))
-                        col_bam <- rep(bfile_names_by_design,
-                                each=length_std_dt_struct)
-                        
-                        nb_bfile_by_design <- unlist(map(design_names , 
-                                ~length(which(design[,which(
-                                colnames(design) == .x)] > 0))))
-                        col_design <- rep(design_names,
-                                    times=(nb_bfile_by_design *
-                                        length_std_dt_struct))
-                        
-                        ## col_values
-                        #NB : lapply(Views...) -> out of limits of view
-                        grtot <- self$get_regions()
-                        col_values <- list()
-                        idx <- 1 #index for col_values list
-                        idx_sd_loop <- 1 
-                        for(bam in bam_names_in_design) {
-                            for (i in 1:length(grtot)){
-								gr <- grtot[[i]]
-								sq <- unique(as.character(seqnames(gr)))
-                                val <- Views(
-                                    coverages[[bam]][[sq]], 
-                                    start(gr), 
-                                    end(gr))
-                                col_values[[idx]] <- unlist(lapply(
-                                val, as.numeric))
-                                idx <- idx + 1
-                            }
+                    bfile_names_by_design <- tools::file_path_sans_ext(
+                        unlist(map(design_names , 
+                            ~design[which(design[,
+                                which(colnames(
+                                    design) == .x)] > 0),1])))
+                    col_bam <- rep(bfile_names_by_design,
+                            each=length_std_dt_struct)
+                    
+                    nb_bfile_by_design <- unlist(map(design_names , 
+                            ~length(which(design[,which(
+                            colnames(design) == .x)] > 0))))
+                    col_design <- rep(design_names,
+                                times=(nb_bfile_by_design *
+                                    length_std_dt_struct))
+                    
+                    ## col_values
+                    #NB : lapply(Views...) -> out of limits of view
+                    grtot <- self$get_regions()
+                    col_values <- list()
+                    idx <- 1 #index for col_values list
+                    idx_sd_loop <- 1 
+                    for(bam in bam_names_in_design) {
+                        for (i in 1:length(grtot)){
+							gr <- grtot[[i]]
+							sq <- unique(as.character(seqnames(gr)))
+                            val <- Views(
+                                coverages[[bam]][[sq]], 
+                                start(gr), 
+                                end(gr))
+                            col_values[[idx]] <- unlist(lapply(
+                            val, as.numeric))
+                            idx <- idx + 1
                         }
-                        col_values <- unlist(col_values)
+                    }
+                    col_values <- unlist(col_values)
                     
                     if (!is.null(bin_count)) {
                         message('produce data table : RNA-Seq binned')
