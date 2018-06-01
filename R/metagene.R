@@ -225,9 +225,10 @@ metagene <- R6Class("metagene",
             private$params[["force_seqlevels"]] <- force_seqlevels
             private$params[["flip_regions"]] <- FALSE
             private$params[["assay"]] <- tolower(assay)
-            private$params[["df_needs_update"]] <- TRUE
             private$params[["df_arguments"]] <- ""
-            private$params[["table_needs_update"]] <- TRUE
+            
+            private$params[["alpha"]] <- 0.05
+            private$params[["sample_count"]] <- 1000
             
             # Prepare bam files
             private$print_verbose("Prepare bam files...")
@@ -252,7 +253,7 @@ metagene <- R6Class("metagene",
             private$params
         },
         get_design = function() {
-            private$design
+            private$params$design
         },
         get_regions = function(region_names = NULL) {
             if (is.null(region_names)) {
@@ -327,7 +328,7 @@ metagene <- R6Class("metagene",
                     stopifnot(all(design_names %in% 
                                     unique(private$table$design)))
                 } else {
-                    design_names <- colnames(private$design)[-1]
+                    design_names <- colnames(private$params$design)[-1]
                 }
                 i <- (private$df$region %in% region_names &
                                     private$df$design %in% design_names)
@@ -367,7 +368,7 @@ metagene <- R6Class("metagene",
             coverages
         },
         get_design_coverages = function(design=NA, noise_removal=NA, normalization=NA) {
-            if(length(private$design_coverages)==0) {
+            if(design_coverage_need_update(design, normalization, noise_removal)) {
                 # Get the correct parameters.
                 design <- private$fetch_design(design)
                 noise_removal = private$get_param_value(noise_removal, "noise_removal")
@@ -394,8 +395,8 @@ metagene <- R6Class("metagene",
             return(private$design_coverages)
         },
         add_design = function(design, check_bam_files = FALSE) {
-            private$design = private$fetch_design(design, check_bam_files)
-            private$params[["table_needs_update"]] <- TRUE
+            private$params$design = private$fetch_design(design, check_bam_files)
+            private$table <- NULL
         },
         produce_table = function(design = NA, bin_count = NA, bin_size = NULL,
                                 noise_removal = NA, normalization = NA,
@@ -419,15 +420,11 @@ metagene <- R6Class("metagene",
                                                     "normalization")
             coverages <- private$coverages
 
-            #addition of private$params[["table_needs_update"]] comes from 
-            #troubles in table update when adding a design with the add_design
-            #function and changing nothing else in produce_table parameters
             if (private$table_need_update(design = design,
                                     bin_count = bin_count,
                                     bin_size = bin_size,
                                     noise_removal = noise_removal,
-                                    normalization = normalization) |
-                                    private$params[["table_needs_update"]]) {
+                                    normalization = normalization)) {
                 
                 if (!is.null(normalization)) {
                     coverages <- private$normalize_coverages(coverages)
@@ -625,9 +622,8 @@ metagene <- R6Class("metagene",
                 private$params[["bin_count"]] <- bin_count
                 private$params[["noise_removal"]] <- noise_removal
                 private$params[["normalization"]] <- normalization
-                private$params[["df_needs_update"]] <- TRUE
-                private$params[["table_needs_update"]] <- FALSE
-                private$design <- design
+                private$df <- NULL
+                private$params[["design"]] <- design
             } else {
                 message(paste('WARNING : table is unchanged regarding',
                     'design, bin_count, noise_removal, normalization.'))
@@ -643,7 +639,6 @@ metagene <- R6Class("metagene",
                                                     avoid_gaps = FALSE, 
                                                     bam_name = NULL, 
                                                     gaps_threshold = 0) {
-            
             #arguments checking
             stopifnot(is.numeric(alpha))
             stopifnot(is.numeric(sample_count))
@@ -657,7 +652,7 @@ metagene <- R6Class("metagene",
                 bam_names <- tools::file_path_sans_ext(basename(
                                                 private$params[["bam_files"]]))
                 if (!bam_name %in% bam_names){
-                    stop(paste("bam_name argument is no one of bam_names",
+                    stop(paste("bam_name argument is not one of bam_names",
                                         "provided to the metagene object"))
                 }
             }
@@ -672,10 +667,10 @@ metagene <- R6Class("metagene",
                                     
             if (private$params[["df_arguments"]] != list_of_arguments){
                 private$params[["df_arguments"]] <- list_of_arguments
-                private$params[["df_needs_update"]] <- TRUE
+                private$df <- NULL
             }
             
-            if (private$params[['df_needs_update']]){
+            if (is.null(private$df)) {
             
                 # 1. Get the correctly formatted table
                 if (is.null(self$get_table())) {
@@ -687,7 +682,6 @@ metagene <- R6Class("metagene",
             
                 if (private$params[['assay']] == 'chipseq') {
                     message('produce data frame : ChIP-Seq')
-                    private$data_frame_need_update(alpha, sample_count)
                     sample_size <- self$get_table()[bin == 1,][
                                             ,.N, by = .(region, design)][
                                             , .(min(N))]
@@ -713,7 +707,6 @@ metagene <- R6Class("metagene",
                 } else if (private$params[['assay']] == 'rnaseq' 
                                 & !('bin' %in% colnames(private$df))){
                     message('produce data frame : RNA-Seq')
-                    private$data_frame_need_update(alpha, sample_count)
 
                     
                     sample_size <- self$get_table()[nuc == 1,][
@@ -770,7 +763,6 @@ metagene <- R6Class("metagene",
                 } else if (private$params[['assay']] == 'rnaseq' 
                                         & ('bin' %in% colnames(private$df))){
                     message('produce data frame : RNA-Seq binned')
-                    private$data_frame_need_update(alpha, sample_count)
                         
                     sample_size <- self$get_table()[bin == 1,][
                                             ,.N, by = .(design)][
@@ -818,9 +810,7 @@ metagene <- R6Class("metagene",
                                 private$df$region,
                                 sep="_")
                 private$df$group <- as.factor(private$df$group)
-                
-                
-                private$params[["df_needs_update"]] <- FALSE
+
                 invisible(self)
             }
         },
@@ -875,7 +865,7 @@ metagene <- R6Class("metagene",
             invisible(self)
         }
     ),
-        private = list(
+    private = list(
         params = list(),
         regions = GRangesList(),
         table = data.table(),
@@ -988,9 +978,8 @@ metagene <- R6Class("metagene",
             }
             if (!identical(noise_removal, NA)) {
                 if (!is.null(noise_removal)) {
-                    if (!noise_removal %in% c("NCIS", "RPM")) {
-                        msg <- 'noise_removal must be NA, NULL, "NCIS" or '
-                        msg <- paste0(msg, '"RPM".')
+                    if (!noise_removal %in% c("NCIS")) {
+                        msg <- 'noise_removal must be NA, NULL, or "NCIS".'
                         stop(msg)
                     }
                 }
@@ -1008,53 +997,52 @@ metagene <- R6Class("metagene",
                 stop(msg)
             }
         },
+        # Determines if passed-in params match the ones in private$params.
+        # Parameters can be passed-in by name (noise_removal='NCIS'). If
+        # no name is provided, it is inferred from the passed in expression.
+        # So have_params_changed(noise_removal) will check private$params
+        # for a parameter named "noise_removal".
+        have_params_changed = function(...) {
+            # Get passed-in expressions in case the arguments were unnamed.
+            param_names_alt = sapply( substitute(list(...)), deparse)[-1]
+            
+            # Put arguments inside a list, and make sure there's at least one.
+            arg_list = list(...)
+            if(length(arg_list)==0) {
+                # No arguments means nothing has changed!
+                return(FALSE)
+            }
+            
+            # Infer names
+            param_names = names(arg_list)
+            if(is.null(param_names)) {
+                param_names = param_names_alt
+            } else {
+                param_names = ifelse(param_names=="", param_names_alt, param_names)
+            }
+        
+            ret_val = FALSE
+            for(i in 1:length(arg_list)) {
+                # NA value means "keep what we had", so obviously that did not change.
+                if(!is.na(arg_list[[i]])) {
+                    ret_val = ret_val || !identical(private$params[[param_names[i] ]], arg_list[[i]])
+                }
+            }
+        
+            return(ret_val)
+        },
         table_need_update = function(design, bin_count, bin_size,
                                         noise_removal, normalization) {
-            if (!identical(private$design, design)) {
-                return(TRUE)
-            }
-            if (!identical(private$params[["bin_count"]], bin_count)) {
-                return(TRUE)
-            }
-            if (!identical(private$params[["noise_removal"]], noise_removal)) {
-                return(TRUE)
-            }
-            if (!identical(private$params[["normalization"]], normalization)) {
-                return(TRUE)
-            }
-            return(FALSE)
+            return((length(private$table)==0) ||
+                   private$have_params_changed(design, bin_count, bin_size,
+                                       noise_removal, normalization))
         },
         data_frame_need_update = function(alpha = NA, sample_count = NA) {
-            #need_update = FALSE
-            # Fetch saved values
-            alpha = private$get_param_value(alpha, "alpha")
-            sample_count = private$get_param_value(sample_count, 
-                                                    "sample_count")
-
-            # Add default, if needed
-            if (is.null(alpha)) {
-                alpha <- 0.05
-            }
-            if (is.null(sample_count)) {
-                sample_count <- 1000
-            }
-            if (nrow(private$df) == 0) {
-                private$params[['df_needs_update']] <- TRUE
-                #private$params[["alpha"]] <- alpha
-                #private$params[["sample_count"]] <- sample_count
-            } else {
-                # Check if data frame need update
-                if (!identical(private$params[["alpha"]], alpha)) {
-                    private$params[['df_needs_update']] <- TRUE
-                    #private$params[["alpha"]] <- alpha
-                }
-                if (!identical(private$params[["sample_count"]], 
-                                                    sample_count)) {
-                    private$params[['df_needs_update']] <- TRUE
-                    #private$params[["sample_count"]] <- sample_count
-                }
-            }
-            #need_update
+            return((length(private$df) == 0) || private$have_params_changed(alpha, sample_count))
+        },
+        design_coverage_need_update = function(design, normalization, noise_removal) {
+            return((length(private$design_coverages)==0) ||
+                   private$have_params_changed(design, normalization, noise_removal))
         },
         get_param_value = function(param_value, param_name) {
             param_name <- as.character(param_name)
@@ -1199,10 +1187,10 @@ metagene <- R6Class("metagene",
                 return(get_complete_design())
             }
             if (identical(design, NA)) {
-                if (all(dim(private$design) == c(0, 0))) {
+                if (all(dim(private$params$design) == c(0, 0))) {
                     return(get_complete_design())
                 } else {
-                    return(private$design)
+                    return(private$params$design)
                 }
             }
             design[,1] <- as.character(design[,1])
@@ -1235,16 +1223,11 @@ metagene <- R6Class("metagene",
             }
             results
         },
+        # Performs RPM normalization on coverages.
         normalize_coverages = function(coverages) {
-            bam_names <- unlist(lapply(private$bam_handler$get_bam_files()$bam, 
-                                private$bam_handler$get_bam_name))
-            for (bam_name in bam_names) {
-                #which_rows = design[[design_name]]==1
-                #bam_files <- as.character(design[,1][which_rows])
+            for (bam_name in names(coverages)) {
                 count <- private$bam_handler$get_aligned_count(bam_name)
-                #count <- sum(unlist(counts))
-                weight <- 1 / (count / 1000000)
-                coverages[[bam_name]] <-    coverages[[bam_name]] * weight
+                coverages[[bam_name]] <- coverages[[bam_name]] / (count / 1000000)
             }
             coverages
         },
@@ -1272,7 +1255,7 @@ metagene <- R6Class("metagene",
                 private$table$bin[i] <- (self$get_params()$bin_count + 1) - 
                                                         private$table$bin[i]
                 private$table$bin <- as.integer(private$table$bin)
-                private$params[["df_needs_update"]] <- TRUE
+                private$df <- NULL
             } else if (private$params[['assay']] == 'rnaseq'){
                 message('RNA-Seq flip/unflip')
                 i <- which(private$table$strand == '-')
@@ -1291,11 +1274,11 @@ metagene <- R6Class("metagene",
                                                         private$table$bin[i]
                     private$table$bin <- as.integer(private$table$bin)
                 }
-                private$params[["df_needs_update"]] <- TRUE
+                private$df <- NULL
             }
         },
         get_bam_names = function(filenames) {
-            if (all(filenames %in% colnames(private$design)[-1])) {
+            if (all(filenames %in% colnames(private$params$design)[-1])) {
                 filenames
             } else {
                 stopifnot(private$check_bam_files(filenames))
