@@ -430,7 +430,7 @@ metagene <- R6Class("metagene",
                 }
                 
                 if (private$params[['assay']] == 'rnaseq'){
-                    private$table = produce_rna_table(coverages, design, private$get_regions(), bin_count)
+                    private$table = private$produce_rna_table(coverages, design, self$get_regions(), bin_count)
                 } else { # chipseq
                     if (!is.null(noise_removal)) {
                         coverages <- private$remove_controls(coverages, design)
@@ -441,7 +441,7 @@ metagene <- R6Class("metagene",
                     if (is.null(bin_count)) {
                         bin_count = 100
                     }
-                    private$table <- produce_chip_table(coverages, design, private$get_regions(), bin_count)
+                    private$table <- private$produce_chip_table(coverages, design, self$get_regions(), bin_count)
                 }
 
                 private$params[["bin_count"]] <- bin_count
@@ -1440,11 +1440,51 @@ metagene <- R6Class("metagene",
                               value = col_values,
                               strand = col_strand))
         },
-        produce_chip_table = function(coverages, regions, design, bin_count) {
+        # Function to generate a table for chip-seq data. 
+        # This is a workhorse function which assumes that all parameter
+        # validations have already been passed.
+        #
+        # Here we provide an example of the expected results for two regions
+        # (Each with two ranges) and two designs.
+        #
+        # The resulting table holds its values in the following hierarchical order.
+        # Values are shown until they start repeating.
+        #
+        # Note that "bin" repeats as many times as there are ranges within
+        # the given region.
+        #
+        # Here is the table representing the above examples. Note that the table
+        # may be post-processed by flip_regions before being returned.
+        #
+        # region | design |    bin     | value | strand |
+        #   r1   |  d1    |     1      |   x   |   +    |
+        #   .    |  .     |     .      |   x   |   +    |
+        #   .    |  .     |  bin_count |   x   |   +    |
+        #   .    |  .     |     1      |   x   |   -    |   
+        #   .    |  .     |     .      |   x   |   -    |
+        #   .    |  .     |  bin_count |   x   |   -    |
+        #   .    |  d2    |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |   
+        #   r2   |  d1    |            |   x   |   -    |
+        #   .    |  .     |            |   x   |   -    |
+        #   .    |  .     |            |   x   |   -    |
+        #   .    |  .     |            |   x   |   +    |
+        #   .    |  .     |            |   x   |   +    |
+        #   .    |  .     |            |   x   |   +    |
+        #   .    |  d2    |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        produce_chip_table = function(coverages, design, regions, bin_count) {
             message('produce data table : ChIP-Seq')
-            region_length <- vapply(self$get_regions(), length, 
-                numeric(1))
-            col_regions <- names(self$get_regions()) %>%
+            region_length <- vapply(regions, length, numeric(1))
+            col_regions <- names(regions) %>%
                 map(~ rep(.x, length(coverages) * bin_count * 
                             region_length[.x])) %>% unlist()
             col_designs <- map(region_length, ~ rep(names(coverages), 
@@ -1452,28 +1492,31 @@ metagene <- R6Class("metagene",
             col_bins <- rep(1:bin_count,
                             length(coverages) * sum(region_length))
             pairs <- expand.grid(colnames(design)[-1], 
-                                names(self$get_regions()), 
+                                names(regions), 
                                 stringsAsFactors = FALSE)
             col_values <- map2(pairs$Var1, pairs$Var2,
                 ~ private$get_subtable(coverages[[.x]], .y, 
                     bin_count)) %>% unlist
             
             #TODO : improve col_strand production
+            # Vectorize? Slower than loop with small data set.
+            # col_strand = unlist(lapply((lapply(lapply(strand(regions), rep, each=bin_count), rep, length(names(coverages)))), as.vector))
+            
             col_strand <- list()
             idx <- 1
             for (region_names in unique(col_regions)){
                 col_strand[[idx]] <- rep(rep(
-                    as.vector(strand(private$regions)[[region_names]]),
+                    as.vector(strand(regions)[[region_names]]),
                     each=bin_count),length(unique(col_designs)))
                 idx <- idx + 1
             }
             col_strand <- unlist(col_strand)
             
-            private$table <- data.table(region = col_regions,
-                        design = col_designs,
-                        bin = col_bins,
-                        value = col_values,
-                        strand = col_strand)
+            return(data.table(region = col_regions,
+                              design = col_designs,
+                              bin = col_bins,
+                              value = col_values,
+                              strand = col_strand))
         }
     )
 )
