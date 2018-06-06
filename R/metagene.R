@@ -433,99 +433,129 @@ metagene <- R6Class("metagene",
                 }
                 
                 if (private$params[['assay']] == 'rnaseq'){
-                
-                    # here the word 'gene' = 'region'
-                    bam_files_names <- names(private$params[["bam_files"]])
-
-                    # useful variables for caculations of 
-                    # standard data table structure (std_dt_struct)
+                    # Here we provide an example of the expected results for
+                    # a design with two groups (d1 and d2) of two and one bam files respectively
+                    # (b1 and b2 for d1, b3 for d2):
+                    #  Samples   d1   d2
+                    #     b1     1    0
+                    #     b2     1    0
+                    #     b3     0    1
+                    #
+                    # The resulting table holds its values in the following hierarchical order.
+                    # Values are shown until they start repeating. Values preceded by
+                    # a <- indicate that they can be directly inferred from the columns 
+                    # to their left (Example: exon size can be inferred from exon number),
+                    # and thus have the same cycle.
+                    #
+                    # Most columns have self-explanatory names, except three:
+                    #  - nuc: represents the nucleotide position within the gene/region.
+                    #  - regionstartnuc: Multiple genes are "linearized" in a virtual nucleotide space.
+                    #                    Suppose gene 1 has 6 nucleotides, and gene 2 has five.
+                    #                    Gene 1 occupies the [1,6] span of the linearized space,
+                    #                    while gene 2 occupies the [7,11] span.
+                    #                    This column indicates the start position of the gene
+                    #                    within the linearized space. It would be 1 for gene 1,
+                    #                    and 7 for gene 2.
+                    #  - nuctot: The position in the linearized gene space.
+                    #
+                    # Note that nuc + regionstartnuc - 1 = nuctot.
+                    #
+                    # Here is the table representing the above examples. Note that the table
+                    # may be post-processed by flip_regions before being returned.
+                    #
+                    # design | bam | region | regionsize | strand | regionstartnuc | exon | exonsize | bin | nuc | nuctot | value | 
+                    #   d1   |  b1 |   r1   |    <- 6    |  <- +  |     <- 1       | r1e1 |   <- 3   |  1  |  1  |   1    |   x   | 
+                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  1  |  2  |   2    |   x   | 
+                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  2  |  3  |   3    |   x   | 
+                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       | r1e2 |   <- 3   |  2  |  4  |   4    |   x   | 
+                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  3  |  5  |   5    |   x   | 
+                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  3  |  6  |   6    |   x   |    
+                    #   .    |  .  |   r2   |    <- 5    |  <- -  |     <- 7       | r2e1 |   <- 5   |  1  |  1  |   7    |   x   | 
+                    #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  1  |  2  |   8    |   x   | 
+                    #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  2  |  3  |   9    |   x   | 
+                    #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  2  |  4  |   10   |   x   | 
+                    #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  3  |  5  |   11   |   x   | 
+                    #   .    |  b2 |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |    
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |                     
+                    #   d2   |  b3 |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |                     
+                    
+                    # Calculate useful variables. Here the word 'gene' = 'region'
                     gene_count <- length(private$regions)
                     gene_names <- names(private$regions)
-                    exon_length_by_exon_by_gene <- width(private$regions)
-                    exon_length_by_exon_by_gene_cum <- vapply(
-                                exon_length_by_exon_by_gene, sum, numeric(1))
-
-                    exon_count_by_gene <- vapply(private$regions, length, 
-                                                                numeric(1))
+                    exon_lengths <- width(private$regions)
+                    gene_lengths <- vapply(exon_lengths, sum, numeric(1))
                     
-                    ## standard data table structure for one replicate
-                    col_gene <- rep(gene_names, times=unlist(map(
-                            1:gene_count, 
-                            ~sum(exon_length_by_exon_by_gene[[
-                                                        gene_names[.x]]]))))
+                    # The number of rows/nucleotides for a region is the 
+                    # sum of all exon lengths.
+                    nuc_per_region = vapply(exon_lengths, sum, numeric(1))
+                    
+                    # The number of rows per bam file the total number of nucleotides
+                    # within all regions.
+                    row_per_bam = sum(nuc_per_region)
+         
+                    nb_bfile_by_design <- map_int(private$get_bam_by_design(), ~length(.x))
 
-                    exon_names <- unlist(map(exon_count_by_gene, ~ 1:.x))
-                    col_exon <- as.vector(rep(exon_names, 
-                                times=unlist(exon_length_by_exon_by_gene)))
+                    ##### design column #####
+                    # The number of rows per design is the number of nucleotides per region
+                    # times the number of bams in that region.
+                    rows_per_design = nb_bfile_by_design * row_per_bam
+                    col_design <- rep(private$get_design_names(), times=rows_per_design) 
+                    
+                    ##### bam column #####
+                    col_bam = rep(unlist(private$get_bam_by_design()), each = row_per_bam)
+                    
+                    ##### region/gene columns #####
+                    col_gene <- rep(gene_names, times=gene_lengths)
+                    col_gene_size <- rep(gene_lengths, times=gene_lengths)
+                    col_strand <- as.vector(unlist(strand(test_regions), use.names=FALSE))
+
+                    gene_length_cum <- c(0, cumsum(gene_lengths)[-length(gene_lengths)])+1
+                    col_gene_start_nuc <- rep(gene_length_cum, times = gene_lengths)
+                    
+                    ##### exon columns #####
+                    exon_counts <- vapply(private$regions, length, numeric(1))                
+                    exon_names <- unlist(map(exon_counts, ~ 1:.x))
+                    v_exon_lengths = as.vector(unlist(exon_lengths))
+                    col_exon <- as.vector(rep(exon_names, times=v_exon_lengths))
+                    
+                    #useful for flip function            
+                    col_exon_size <- rep(v_exon_lengths, times=v_exon_lengths)
                                 
-                    col_exon_size <- rep(as.vector(#useful for flip function
-                            unlist(exon_length_by_exon_by_gene)), 
-                            times=as.vector(unlist(
-                                exon_length_by_exon_by_gene)))
+                    ##### nuc/bin columns #####
+                    col_nuc_tot = 1:row_per_bam
+                    col_nuc = (col_nuc_tot - col_gene_start_nuc) + 1
+
+                    if (!is.null(bin_count)) {
+                        col_bins <- as.integer(trunc((col_nuc/col_gene_size)*bin_count)+1)
+                    } else {
+                        col_bins = col_nuc
+                    }
                                 
-                    gene_size <- unlist(map(1:length(self$get_regions()), 
-                                    ~sum(width(self$get_regions()[[.x]]))))
-                    col_gene_size <- rep(gene_size, times = gene_size)
-                    
-                    gene_length_cum <- c(0,
-                                cumsum(gene_size)[-length(gene_size)])+1
-                    col_gene_start_nuc <- rep(gene_length_cum, 
-                                                        times = gene_size)
-                    
-                    col_nuc <- unlist(map(as.vector(unlist(
-                                exon_length_by_exon_by_gene_cum)), ~ 1:.x))
-                    
-                    exon_strand_by_exon_by_gene <- unlist(map(gene_names, 
-                                ~as.vector(strand(private$regions[[.x]]))))
-                    col_strand <- as.vector(rep(exon_strand_by_exon_by_gene,
-                                times=unlist(exon_length_by_exon_by_gene)))
-                    
-                    
-                    length_std_dt_struct = length(col_gene)
-
-                    # the number of not empty cases in the design param
-                    copies_count <- sum(replace(unlist(design[,-1]),
-                                which(unlist(design[,-1]) == 2),1))
-
-                    #multiplication of standard data table structure
-                    col_gene <- rep(col_gene, copies_count)
-                    col_exon <- rep(col_exon, copies_count)
-                    col_nuctot <- 1:length(col_nuc)
-                    col_nuctot <- rep(col_nuctot, copies_count)
-                    col_nuc <- rep(col_nuc, copies_count)
-                    col_exon_size <- rep(col_exon_size, copies_count)
-                    col_gene_size <- rep(col_gene_size, copies_count)
-                    col_strand <- rep(col_strand, copies_count)
-                    col_gene_start_nuc <- rep(col_gene_start_nuc, 
-                                                            copies_count)
-                        
-                    ## other columns of data table
-                    design_names <- colnames(design)[-1]
-                    bam_names_in_design <- tools::file_path_sans_ext(
-                                                        design[,1])
-
-                    bfile_names_by_design <- tools::file_path_sans_ext(
-                        unlist(map(design_names , 
-                            ~design[which(design[,
-                                which(colnames(
-                                    design) == .x)] > 0),1])))
-                    col_bam <- rep(bfile_names_by_design,
-                            each=length_std_dt_struct)
-                    
-                    nb_bfile_by_design <- unlist(map(design_names , 
-                            ~length(which(design[,which(
-                            colnames(design) == .x)] > 0))))
-                    col_design <- rep(design_names,
-                                times=(nb_bfile_by_design *
-                                    length_std_dt_struct))
-                    
                     ## col_values
                     #NB : lapply(Views...) -> out of limits of view
                     grtot <- self$get_regions()
                     col_values <- list()
                     idx <- 1 #index for col_values list
                     idx_sd_loop <- 1 
-                    for(bam in bam_names_in_design) {
+                    for(bam in unlist(private$bam_names_by_design())) {
                         for (i in 1:length(grtot)){
 							gr <- grtot[[i]]
 							sq <- unique(as.character(seqnames(gr)))
@@ -533,47 +563,26 @@ metagene <- R6Class("metagene",
                                 coverages[[bam]][[sq]], 
                                 start(gr), 
                                 end(gr))
-                            col_values[[idx]] <- unlist(lapply(
-                            val, as.numeric))
+                            col_values[[idx]] <- unlist(lapply(val, as.numeric))
                             idx <- idx + 1
                         }
                     }
                     col_values <- unlist(col_values)
                     
-                    if (!is.null(bin_count)) {
-                        message('produce data table : RNA-Seq binned')
-                        col_bins <- trunc(
-                                    (col_nuc/(col_gene_size+1))*bin_count)+1
-                        col_bins <- as.integer(col_bins)
-                        
-                        private$table <- data.table(
+                    message('produce data table : RNA-Seq')                                        
+                    results = data.table(
                                 region = col_gene,
                                 exon = col_exon,
                                 bam = col_bam,
                                 design = col_design,
                                 bin = col_bins,
                                 nuc = col_nuc,
-                                nuctot = col_nuctot,
+                                nuctot = 1:length(col_nuc),
                                 exonsize = col_exon_size,
                                 regionsize = col_gene_size,
                                 regionstartnuc = col_gene_start_nuc,
                                 value = col_values,
                                 strand = col_strand)
-                    } else {
-                        message('produce data table : RNA-Seq')
-                        private$table <- data.table(
-                                region = col_gene,
-                                exon = col_exon,
-                                bam = col_bam,
-                                design = col_design,
-                                nuc = col_nuc,
-                                nuctot = col_nuctot,
-                                exonsize = col_exon_size,
-                                regionsize = col_gene_size,
-                                regionstartnuc = col_gene_start_nuc,
-                                value = col_values,
-                                strand = col_strand)
-                    }    
                 } else { # chipseq
                     if (!is.null(noise_removal)) {
                         coverages <- private$remove_controls(coverages, design)
@@ -1425,6 +1434,36 @@ metagene <- R6Class("metagene",
                                         *private$params[["bin_count"]])+1
                 private$df$bin <- as.integer(col_bins)
             }
+        },
+        get_design_names <- function() {
+            if(is.null(private$params$desgin)) {
+                return(NULL)
+            } else {
+                return(colnames(private$params$desgin)[-1])
+            }
+        },
+        get_design_number <- function() {
+            if(is.null(private$params$desgin)) {
+                return(NULL)
+            } else {
+                return(ncol(designs) - 1)
+            }        
+        },
+        get_bam_in_design <- function(design_name) {
+            get_x_in_design(design_name, 2)
+        },
+        get_control_in_design <- function(design_name) {
+            get_x_in_design(design_name, 1)        
+        },
+        get_x_in_design <- function(design_name, value) {
+            if(is.null(private$params$design)) {
+                return(NULL)
+            } else {
+                return(private$params$design$Samples[private$params$design[[design_name]] == value])
+            }        
+        },
+        get_bam_by_design <- function() {
+            lapply(get_design_names(), get_bam_in_design)
         }
     )
 )
