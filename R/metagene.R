@@ -403,12 +403,10 @@ metagene <- R6Class("metagene",
                                 flip_regions = FALSE) {
             if (!is.null(bin_size)) {
                 warning("bin_size is now deprecated. Please use bin_count.")
-                bin_size <- NULL
             }
 
             if (private$table_need_update(design = design,
                                           bin_count = bin_count,
-                                          bin_size = bin_size,
                                           noise_removal = noise_removal,
                                           normalization = normalization)) {            
             
@@ -419,7 +417,6 @@ metagene <- R6Class("metagene",
                 normalization <- private$get_param_value(normalization, "normalization")
                                                         
                 private$check_produce_table_params(bin_count = bin_count,
-                                                   bin_size = bin_size,
                                                    design = design,
                                                    noise_removal = noise_removal,
                                                    normalization = normalization,
@@ -433,161 +430,7 @@ metagene <- R6Class("metagene",
                 }
                 
                 if (private$params[['assay']] == 'rnaseq'){
-                    # Here we provide an example of the expected results for
-                    # a design with two groups (d1 and d2) of two and one bam files respectively
-                    # (b1 and b2 for d1, b3 for d2):
-                    #  Samples   d1   d2
-                    #     b1     1    0
-                    #     b2     1    0
-                    #     b3     0    1
-                    #
-                    # The resulting table holds its values in the following hierarchical order.
-                    # Values are shown until they start repeating. Values preceded by
-                    # a <- indicate that they can be directly inferred from the columns 
-                    # to their left (Example: exon size can be inferred from exon number),
-                    # and thus have the same cycle.
-                    #
-                    # Most columns have self-explanatory names, except three:
-                    #  - nuc: represents the nucleotide position within the gene/region.
-                    #  - regionstartnuc: Multiple genes are "linearized" in a virtual nucleotide space.
-                    #                    Suppose gene 1 has 6 nucleotides, and gene 2 has five.
-                    #                    Gene 1 occupies the [1,6] span of the linearized space,
-                    #                    while gene 2 occupies the [7,11] span.
-                    #                    This column indicates the start position of the gene
-                    #                    within the linearized space. It would be 1 for gene 1,
-                    #                    and 7 for gene 2.
-                    #  - nuctot: The position in the linearized gene space.
-                    #
-                    # Note that nuc + regionstartnuc - 1 = nuctot.
-                    #
-                    # Here is the table representing the above examples. Note that the table
-                    # may be post-processed by flip_regions before being returned.
-                    #
-                    # design | bam | region | regionsize | strand | regionstartnuc | exon | exonsize | bin | nuc | nuctot | value | 
-                    #   d1   |  b1 |   r1   |    <- 6    |  <- +  |     <- 1       | r1e1 |   <- 3   |  1  |  1  |   1    |   x   | 
-                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  1  |  2  |   2    |   x   | 
-                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  2  |  3  |   3    |   x   | 
-                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       | r1e2 |   <- 3   |  2  |  4  |   4    |   x   | 
-                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  3  |  5  |   5    |   x   | 
-                    #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  3  |  6  |   6    |   x   |    
-                    #   .    |  .  |   r2   |    <- 5    |  <- -  |     <- 7       | r2e1 |   <- 5   |  1  |  1  |   7    |   x   | 
-                    #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  1  |  2  |   8    |   x   | 
-                    #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  2  |  3  |   9    |   x   | 
-                    #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  2  |  4  |   10   |   x   | 
-                    #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  3  |  5  |   11   |   x   | 
-                    #   .    |  b2 |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |    
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |                     
-                    #   d2   |  b3 |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
-                    #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |                     
-                    
-                    # Calculate useful variables. Here the word 'gene' = 'region'
-                    gene_count <- length(private$regions)
-                    gene_names <- names(private$regions)
-                    exon_lengths <- width(private$regions)
-                    gene_lengths <- vapply(exon_lengths, sum, numeric(1))
-                    
-                    # The number of rows/nucleotides for a region is the 
-                    # sum of all exon lengths.
-                    nuc_per_region = vapply(exon_lengths, sum, numeric(1))
-                    
-                    # The number of rows per bam file the total number of nucleotides
-                    # within all regions.
-                    row_per_bam = sum(nuc_per_region)
-         
-                    nb_bfile_by_design <- purrr::map_int(private$get_bam_by_design(design), ~length(.x))
-
-                    ##### design column #####
-                    # The number of rows per design is the number of nucleotides per region
-                    # times the number of bams in that region.
-                    rows_per_design = nb_bfile_by_design * row_per_bam
-                    col_design <- rep(private$get_design_names(design), times=rows_per_design) 
-                    
-                    ##### bam column #####
-                    col_bam = rep(unlist(private$get_bam_by_design(design)), each = row_per_bam)
-                    
-                    ##### region/gene columns #####
-                    col_gene <- rep(gene_names, times=gene_lengths)
-                    col_gene_size <- rep(gene_lengths, times=gene_lengths)
-                    
-                    # Strands are presumed to be identical throughout a region, so
-                    # we only grab the first one.
-                    strand_per_gene = unlist(lapply( strand(test_regions), function(x){as.character(x[1])}))
-                    col_strand <- rep(strand_per_gene, times=gene_lengths)
-
-                    gene_length_cum <- c(0, cumsum(gene_lengths)[-length(gene_lengths)])+1
-                    col_gene_start_nuc <- rep(gene_length_cum, times = gene_lengths)
-                    
-                    ##### exon columns #####
-                    exon_counts <- vapply(private$regions, length, numeric(1))                
-                    exon_names <- unlist(map(exon_counts, ~ 1:.x))
-                    v_exon_lengths = as.vector(unlist(exon_lengths))
-                    col_exon <- as.vector(rep(exon_names, times=v_exon_lengths))
-                    
-                    #useful for flip function            
-                    col_exon_size <- rep(v_exon_lengths, times=v_exon_lengths)
-                                
-                    ##### nuc/bin columns #####
-                    col_nuc_tot = 1:row_per_bam
-                    col_nuc = (col_nuc_tot - col_gene_start_nuc) + 1
-
-                    if (!is.null(bin_count)) {
-                        col_bins <- as.integer(trunc((col_nuc/col_gene_size)*bin_count)+1)
-                    } else {
-                        col_bins = col_nuc
-                    }
-                                
-                    ## col_values
-                    #NB : lapply(Views...) -> out of limits of view
-                    grtot <- self$get_regions()
-                    col_values <- list()
-                    idx <- 1 #index for col_values list
-                    idx_sd_loop <- 1 
-                    for(bam in unlist(private$get_bam_by_design(design))) {
-                        bam_name = tools::file_path_sans_ext(basename(bam))
-                        for (i in 1:length(grtot)){
-							gr <- grtot[[i]]
-							sq <- unique(as.character(seqnames(gr)))
-                            val <- Views(
-                                coverages[[bam_name]][[sq]], 
-                                start(gr), 
-                                end(gr))
-                            col_values[[idx]] <- unlist(lapply(val, as.numeric))
-                            idx <- idx + 1
-                        }
-                    }
-                    col_values <- unlist(col_values)
-                    
-                    message('produce data table : RNA-Seq')                                        
-                    private$table <- data.table(
-                                region = col_gene,
-                                exon = col_exon,
-                                bam = col_bam,
-                                design = col_design,
-                                bin = col_bins,
-                                nuc = col_nuc,
-                                nuctot = 1:length(col_nuc),
-                                exonsize = col_exon_size,
-                                regionsize = col_gene_size,
-                                regionstartnuc = col_gene_start_nuc,
-                                value = col_values,
-                                strand = col_strand)
+                    private$table = produce_rna_table(coverages, design, private$get_regions(), bin_count)
                 } else { # chipseq
                     if (!is.null(noise_removal)) {
                         coverages <- private$remove_controls(coverages, design)
@@ -595,45 +438,12 @@ metagene <- R6Class("metagene",
                         coverages <- private$merge_chip(coverages, design)
                     }
                 
-                    message('produce data table : ChIP-Seq')
                     if (is.null(bin_count)) {
                         bin_count = 100
                     }
-                    region_length <- vapply(self$get_regions(), length, 
-                        numeric(1))
-                    col_regions <- names(self$get_regions()) %>%
-                        map(~ rep(.x, length(coverages) * bin_count * 
-                                    region_length[.x])) %>% unlist()
-                    col_designs <- map(region_length, ~ rep(names(coverages), 
-                                        each = bin_count * .x)) %>% unlist
-                    col_bins <- rep(1:bin_count,
-                                    length(coverages) * sum(region_length))
-                    pairs <- expand.grid(colnames(design)[-1], 
-                                        names(self$get_regions()), 
-                                        stringsAsFactors = FALSE)
-                    col_values <- map2(pairs$Var1, pairs$Var2,
-                        ~ private$get_subtable(coverages[[.x]], .y, 
-                            bin_count)) %>% unlist
-                    
-                    #TODO : improve col_strand production
-                    col_strand <- list()
-                    idx <- 1
-                    for (region_names in unique(col_regions)){
-                        col_strand[[idx]] <- rep(rep(
-                            as.vector(strand(private$regions)[[region_names]]),
-                            each=bin_count),length(unique(col_designs)))
-                        idx <- idx + 1
-                    }
-                    col_strand <- unlist(col_strand)
-                    
-                    private$table <- data.table(region = col_regions,
-                                design = col_designs,
-                                bin = col_bins,
-                                value = col_values,
-                                strand = col_strand)
+                    private$table <- produce_chip_table(coverages, design, private$get_regions(), bin_count)
                 }
 
-                private$params[["bin_size"]] <- bin_size
                 private$params[["bin_count"]] <- bin_count
                 private$params[["noise_removal"]] <- noise_removal
                 private$params[["normalization"]] <- normalization
@@ -961,7 +771,7 @@ metagene <- R6Class("metagene",
                 }
             }
         },
-        check_produce_table_params = function(bin_count, bin_size, design,
+        check_produce_table_params = function(bin_count, design,
                                                 noise_removal, normalization,
                                                 flip_regions) {
             # At least one file must be used in the design
@@ -1046,10 +856,10 @@ metagene <- R6Class("metagene",
         
             return(ret_val)
         },
-        table_need_update = function(design, bin_count, bin_size,
-                                        noise_removal, normalization) {
+        table_need_update = function(design, bin_count, 
+                                     noise_removal, normalization) {
             return((length(private$table)==0) ||
-                   private$have_params_changed(design, bin_count, bin_size,
+                   private$have_params_changed(design, bin_count,
                                        noise_removal, normalization))
         },
         data_frame_need_update = function(alpha = NA, sample_count = NA) {
@@ -1469,6 +1279,201 @@ metagene <- R6Class("metagene",
         },
         get_bam_by_design = function(design) {
             map(private$get_design_names(design), ~private$get_bam_in_design(design, .x))
+        },
+        # Function to generate a table for rna-seq data. 
+        # This is a workhorse function which assumes that all parameter
+        # validations have already been passed.
+        #
+        # Here we provide an example of the expected results for
+        # a design with two groups (d1 and d2) of two and one bam files respectively
+        # (b1 and b2 for d1, b3 for d2):
+        #  Samples   d1   d2
+        #     b1     1    0
+        #     b2     1    0
+        #     b3     0    1
+        #
+        # The resulting table holds its values in the following hierarchical order.
+        # Values are shown until they start repeating. Values preceded by
+        # a <- indicate that they can be directly inferred from the columns 
+        # to their left (Example: exon size can be inferred from exon number),
+        # and thus have the same cycle.
+        #
+        # Most columns have self-explanatory names, except three:
+        #  - nuc: represents the nucleotide position within the gene/region.
+        #  - regionstartnuc: Multiple genes are "linearized" in a virtual nucleotide space.
+        #                    Suppose gene 1 has 6 nucleotides, and gene 2 has five.
+        #                    Gene 1 occupies the [1,6] span of the linearized space,
+        #                    while gene 2 occupies the [7,11] span.
+        #                    This column indicates the start position of the gene
+        #                    within the linearized space. It would be 1 for gene 1,
+        #                    and 7 for gene 2.
+        #  - nuctot: The position in the linearized gene space.
+        #
+        # Note that nuc + regionstartnuc - 1 = nuctot.
+        #
+        # Here is the table representing the above examples. Note that the table
+        # may be post-processed by flip_regions before being returned.
+        #
+        # design | bam | region | regionsize | strand | regionstartnuc | exon | exonsize | bin | nuc | nuctot | value | 
+        #   d1   |  b1 |   r1   |    <- 6    |  <- +  |     <- 1       | r1e1 |   <- 3   |  1  |  1  |   1    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  1  |  2  |   2    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  2  |  3  |   3    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       | r1e2 |   <- 3   |  2  |  4  |   4    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  3  |  5  |   5    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  3  |  6  |   6    |   x   |    
+        #   .    |  .  |   r2   |    <- 5    |  <- -  |     <- 7       | r2e1 |   <- 5   |  1  |  1  |   7    |   x   | 
+        #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  1  |  2  |   8    |   x   | 
+        #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  2  |  3  |   9    |   x   | 
+        #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  2  |  4  |   10   |   x   | 
+        #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  3  |  5  |   11   |   x   | 
+        #   .    |  b2 |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |    
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |                     
+        #   d2   |  b3 |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |                     
+        produce_rna_table = function(coverages, design, regions, bin_count) {
+          
+            # Calculate useful variables. Here the word 'gene' = 'region'
+            gene_count <- length(regions)
+            gene_names <- names(regions)
+            exon_lengths <- width(regions)
+            gene_lengths <- vapply(exon_lengths, sum, numeric(1))
+            
+            # The number of rows/nucleotides for a region is the 
+            # sum of all exon lengths.
+            nuc_per_region = vapply(exon_lengths, sum, numeric(1))
+            
+            # The number of rows per bam file the total number of nucleotides
+            # within all regions.
+            row_per_bam = sum(nuc_per_region)
+ 
+            nb_bfile_by_design <- purrr::map_int(private$get_bam_by_design(design), ~length(.x))
+
+            ##### design column #####
+            # The number of rows per design is the number of nucleotides per region
+            # times the number of bams in that region.
+            rows_per_design = nb_bfile_by_design * row_per_bam
+            col_design <- rep(private$get_design_names(design), times=rows_per_design) 
+            
+            ##### bam column #####
+            col_bam = rep(unlist(private$get_bam_by_design(design)), each = row_per_bam)
+            
+            ##### region/gene columns #####
+            col_gene <- rep(gene_names, times=gene_lengths)
+            col_gene_size <- rep(gene_lengths, times=gene_lengths)
+            
+            # Strands are presumed to be identical throughout a region, so
+            # we only grab the first one.
+            strand_per_gene = unlist(lapply( strand(test_regions), function(x){as.character(x[1])}))
+            col_strand <- rep(strand_per_gene, times=gene_lengths)
+
+            gene_length_cum <- c(0, cumsum(gene_lengths)[-length(gene_lengths)])+1
+            col_gene_start_nuc <- rep(gene_length_cum, times = gene_lengths)
+            
+            ##### exon columns #####
+            exon_counts <- vapply(regions, length, numeric(1))                
+            exon_names <- unlist(map(exon_counts, ~ 1:.x))
+            v_exon_lengths = as.vector(unlist(exon_lengths))
+            col_exon <- as.vector(rep(exon_names, times=v_exon_lengths))
+            
+            #useful for flip function            
+            col_exon_size <- rep(v_exon_lengths, times=v_exon_lengths)
+                        
+            ##### nuc/bin columns #####
+            col_nuc_tot = 1:row_per_bam
+            col_nuc = (col_nuc_tot - col_gene_start_nuc) + 1
+
+            if (!is.null(bin_count)) {
+                col_bins <- as.integer(trunc((col_nuc/col_gene_size)*bin_count)+1)
+            } else {
+                col_bins = col_nuc
+            }
+                        
+            ## col_values
+            #NB : lapply(Views...) -> out of limits of view
+            grtot <- self$get_regions()
+            col_values <- list()
+            idx <- 1 #index for col_values list
+            idx_sd_loop <- 1 
+            for(bam in unlist(private$get_bam_by_design(design))) {
+                bam_name = tools::file_path_sans_ext(basename(bam))
+                for (i in 1:length(grtot)){
+                    r <- grtot[[i]]
+                    q <- unique(as.character(seqnames(gr)))
+                    val <- Views(
+                        coverages[[bam_name]][[sq]], 
+                        start(gr), 
+                        end(gr))
+                    col_values[[idx]] <- unlist(lapply(val, as.numeric))
+                    idx <- idx + 1
+                }
+            }
+            col_values <- unlist(col_values)
+            
+            message('produce data table : RNA-Seq')                                        
+            return(data.table(region = col_gene,
+                              exon = col_exon,
+                              bam = col_bam,
+                              design = col_design,
+                              bin = col_bins,
+                              nuc = col_nuc,
+                              nuctot = 1:length(col_nuc),
+                              exonsize = col_exon_size,
+                              regionsize = col_gene_size,
+                              regionstartnuc = col_gene_start_nuc,
+                              value = col_values,
+                              strand = col_strand))
+        },
+        produce_chip_table = function(coverages, regions, design, bin_count) {
+            message('produce data table : ChIP-Seq')
+            region_length <- vapply(self$get_regions(), length, 
+                numeric(1))
+            col_regions <- names(self$get_regions()) %>%
+                map(~ rep(.x, length(coverages) * bin_count * 
+                            region_length[.x])) %>% unlist()
+            col_designs <- map(region_length, ~ rep(names(coverages), 
+                                each = bin_count * .x)) %>% unlist
+            col_bins <- rep(1:bin_count,
+                            length(coverages) * sum(region_length))
+            pairs <- expand.grid(colnames(design)[-1], 
+                                names(self$get_regions()), 
+                                stringsAsFactors = FALSE)
+            col_values <- map2(pairs$Var1, pairs$Var2,
+                ~ private$get_subtable(coverages[[.x]], .y, 
+                    bin_count)) %>% unlist
+            
+            #TODO : improve col_strand production
+            col_strand <- list()
+            idx <- 1
+            for (region_names in unique(col_regions)){
+                col_strand[[idx]] <- rep(rep(
+                    as.vector(strand(private$regions)[[region_names]]),
+                    each=bin_count),length(unique(col_designs)))
+                idx <- idx + 1
+            }
+            col_strand <- unlist(col_strand)
+            
+            private$table <- data.table(region = col_regions,
+                        design = col_designs,
+                        bin = col_bins,
+                        value = col_values,
+                        strand = col_strand)
         }
     )
 )
