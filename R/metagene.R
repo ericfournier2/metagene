@@ -511,21 +511,25 @@ metagene <- R6Class("metagene",
                     # within all regions.
                     row_per_bam = sum(nuc_per_region)
          
-                    nb_bfile_by_design <- map_int(private$get_bam_by_design(), ~length(.x))
+                    nb_bfile_by_design <- purrr::map_int(private$get_bam_by_design(design), ~length(.x))
 
                     ##### design column #####
                     # The number of rows per design is the number of nucleotides per region
                     # times the number of bams in that region.
                     rows_per_design = nb_bfile_by_design * row_per_bam
-                    col_design <- rep(private$get_design_names(), times=rows_per_design) 
+                    col_design <- rep(private$get_design_names(design), times=rows_per_design) 
                     
                     ##### bam column #####
-                    col_bam = rep(unlist(private$get_bam_by_design()), each = row_per_bam)
+                    col_bam = rep(unlist(private$get_bam_by_design(design)), each = row_per_bam)
                     
                     ##### region/gene columns #####
                     col_gene <- rep(gene_names, times=gene_lengths)
                     col_gene_size <- rep(gene_lengths, times=gene_lengths)
-                    col_strand <- as.vector(unlist(strand(test_regions), use.names=FALSE))
+                    
+                    # Strands are presumed to be identical throughout a region, so
+                    # we only grab the first one.
+                    strand_per_gene = unlist(lapply( strand(test_regions), function(x){as.character(x[1])}))
+                    col_strand <- rep(strand_per_gene, times=gene_lengths)
 
                     gene_length_cum <- c(0, cumsum(gene_lengths)[-length(gene_lengths)])+1
                     col_gene_start_nuc <- rep(gene_length_cum, times = gene_lengths)
@@ -555,12 +559,13 @@ metagene <- R6Class("metagene",
                     col_values <- list()
                     idx <- 1 #index for col_values list
                     idx_sd_loop <- 1 
-                    for(bam in unlist(private$bam_names_by_design())) {
+                    for(bam in unlist(private$get_bam_by_design(design))) {
+                        bam_name = tools::file_path_sans_ext(basename(bam))
                         for (i in 1:length(grtot)){
 							gr <- grtot[[i]]
 							sq <- unique(as.character(seqnames(gr)))
                             val <- Views(
-                                coverages[[bam]][[sq]], 
+                                coverages[[bam_name]][[sq]], 
                                 start(gr), 
                                 end(gr))
                             col_values[[idx]] <- unlist(lapply(val, as.numeric))
@@ -570,7 +575,7 @@ metagene <- R6Class("metagene",
                     col_values <- unlist(col_values)
                     
                     message('produce data table : RNA-Seq')                                        
-                    results = data.table(
+                    private$table <- data.table(
                                 region = col_gene,
                                 exon = col_exon,
                                 bam = col_bam,
@@ -1435,35 +1440,35 @@ metagene <- R6Class("metagene",
                 private$df$bin <- as.integer(col_bins)
             }
         },
-        get_design_names <- function() {
-            if(is.null(private$params$desgin)) {
+        get_design_names = function(design) {
+            if(is.null(design)) {
                 return(NULL)
             } else {
-                return(colnames(private$params$desgin)[-1])
+                return(colnames(design)[-1])
             }
         },
-        get_design_number <- function() {
-            if(is.null(private$params$desgin)) {
+        get_design_number = function(design) {
+            if(is.null(design)) {
                 return(NULL)
             } else {
-                return(ncol(designs) - 1)
+                return(ncol(design) - 1)
             }        
         },
-        get_bam_in_design <- function(design_name) {
-            get_x_in_design(design_name, 2)
+        get_bam_in_design = function(design, design_name) {
+            private$get_x_in_design(design, design_name, 1)
         },
-        get_control_in_design <- function(design_name) {
-            get_x_in_design(design_name, 1)        
+        get_control_in_design = function(design, design_name) {
+            private$get_x_in_design(design, design_name, 2)        
         },
-        get_x_in_design <- function(design_name, value) {
-            if(is.null(private$params$design)) {
+        get_x_in_design = function(design, design_name, value) {
+            if(is.null(design)) {
                 return(NULL)
             } else {
-                return(private$params$design$Samples[private$params$design[[design_name]] == value])
+                return(design$Samples[design[[design_name]] == value])
             }        
         },
-        get_bam_by_design <- function() {
-            lapply(get_design_names(), get_bam_in_design)
+        get_bam_by_design = function(design) {
+            map(private$get_design_names(design), ~private$get_bam_in_design(design, .x))
         }
     )
 )
