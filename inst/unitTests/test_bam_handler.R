@@ -7,6 +7,7 @@ if(FALSE) {
     library( "metagene" )
     library( "rtracklayer" )
     library( "DBChIP" )
+    library( "stringr" )
 }
 
 ### }}}
