@@ -535,55 +535,38 @@ metagene <- R6Class("metagene",
                 # 2. Produce the data.frame 
                 private$df <- data.table::copy(self$get_table())
             
+                if(private$params[['assay']]=='rnaseq' && !is.null(private$params[['bin_count']]) {
+                    sample_size_columns = quote(.(region, design))
+                } else {
+                    sample_size_columns = quote(.(design))
+                }
+            
+                # Set up bootstrap analysis.
+                sample_size <- self$get_table()[bin == 1,][
+                                        ,.N, by = eval(sample_size_columns)][
+                                        , .(min(N))]
+                sample_size <- as.integer(sample_size)
+
+                out_cols <- c("value", "qinf", "qsup")
+                bootstrap <- function(df) {
+                    sampling <- matrix(df$value[sample(seq_along(df$value),
+                                            sample_size * sample_count,
+                                            replace = TRUE)],
+                                    ncol = sample_size)
+                    values <- colMeans(sampling)
+                    res <- quantile(values, c(alpha/2, 1-(alpha/2)))
+                    res <- c(mean(df$value), res)
+                    names(res) <- out_cols
+                    as.list(res)
+                }            
+            
+                skip_bootstrap = FALSE
                 if (private$params[['assay']] == 'chipseq') {
                     message('produce data frame : ChIP-Seq')
-                    sample_size <- self$get_table()[bin == 1,][
-                                            ,.N, by = .(region, design)][
-                                            , .(min(N))]
-                    sample_size <- as.integer(sample_size)
 
-                    out_cols <- c("value", "qinf", "qsup")
-                    bootstrap <- function(df) {
-                        sampling <- matrix(df$value[sample(seq_along(
-                                                df$value),
-                                                sample_size * sample_count,
-                                                replace = TRUE)],
-                                        ncol = sample_size)
-                        values <- colMeans(sampling)
-                        res <- quantile(values, c(alpha/2, 1-(alpha/2)))
-                        res <- c(mean(df$value), res)
-                        names(res) <- out_cols
-                        as.list(res)
-                    }
-                    private$df <- private$df[, 
-                                        c(out_cols) := bootstrap(.SD), 
-                                            by = .(region, design, bin)]
-                    private$df <- unique(private$df)
-                } else if (private$params[['assay']] == 'rnaseq' 
-                                & !('bin' %in% colnames(private$df))){
-                    message('produce data frame : RNA-Seq')
-
-                    
-                    sample_size <- self$get_table()[nuc == 1,][
-                                            ,.N, by = .(region, design)][
-                                            , .(min(N))]
-                    sample_size <- as.integer(sample_size)
-                    
-                    out_cols <- c("value", "qinf", "qsup")
-                    bootstrap <- function(df) {
-                        sampling <- matrix(df$value[sample(
-                                                seq_along(df$value),
-                                                sample_size * sample_count,
-                                                replace = TRUE)],
-                                        ncol = sample_size)
-                        values <- colMeans(sampling)
-                        res <- quantile(values, c(alpha/2, 1-(alpha/2)))
-                        res <- c(mean(df$value), res)
-                        names(res) <- out_cols
-                        as.list(res)
-                    }
-
-
+                    bootstrap_cols = quote(.(region, design, bin))
+                    unique_col = c("region", "design", "bin")
+                } else {
                     if(avoid_gaps){
                         if (!is.null(bam_name)){
                             private$data_frame_avoid_gaps_updates(bam_name,
@@ -593,74 +576,37 @@ metagene <- R6Class("metagene",
                                                         private$df$bam[1], 
                                                         gaps_threshold)
                         }
-                    }
-
-###################                    
-                    if(all(rowSums(self$get_design()[,-1, drop=FALSE]) == 1) &
-                        all(colSums(self$get_design()[,-1, drop=FALSE]) == 1)){
-                        private$df$qinf <- private$df$value
-                        private$df$qsup <- private$df$value
-                        private$df$group <- paste0(private$df$design,'_',private$df$region)
-                        private$df <- data.frame(private$df)
-                        #return(private$df)
-                    } else {
-###################
-                        private$df <- private$df[, 
-                                c(out_cols) := bootstrap(.SD), 
-                                by = .(region, design, nuctot)]
-                    }
-                    #filter to avoid duplicated ligne (to reduce df dims)
-                    #it does not matter concerning the plot. Plot works !
-                    private$df <- private$df[which(!duplicated(paste(
-                                    private$df$region,
-                                    private$df$design,
-                                    private$df$nuctot))),]
-                } else if (private$params[['assay']] == 'rnaseq' 
-                                        & ('bin' %in% colnames(private$df))){
-                    message('produce data frame : RNA-Seq binned')
+                    }                
+                
+                    if (is.null(private$params[['bin_count']])) {
+                        message('produce data frame : RNA-Seq')
                         
-                    sample_size <- self$get_table()[bin == 1,][
-                                            ,.N, by = .(design)][
-                                            , .(min(N))]
-                    sample_size <- as.integer(sample_size)
-                    
-                    out_cols <- c("value", "qinf", "qsup")
-                    bootstrap <- function(df) {
-                        sampling <- matrix(df$value[sample(
-                                                seq_along(df$value),
-                                                sample_size * sample_count,
-                                                replace = TRUE)],
-                                        ncol = sample_size)
-                        values <- colMeans(sampling)
-                        res <- quantile(values, c(alpha/2, 1-(alpha/2)))
-                        res <- c(mean(df$value), res)
-                        names(res) <- out_cols
-                        as.list(res)
-                    }
-                    
-                    if(avoid_gaps){
-                        message('Avoiding gaps')
-                        if (!is.null(bam_name)){
-                            private$data_frame_avoid_gaps_updates(bam_name,
-                                                        gaps_threshold)
-                        } else {
-                            private$data_frame_avoid_gaps_updates(
-                                                        private$df$bam[1], 
-                                                        gaps_threshold)
+                        bootstrap_cols = quote(.(region, design, nuctot))
+                        unique_col = c("region", "design", "nuctot")
+                        
+                        if(all(rowSums(self$get_design()[,-1, drop=FALSE]) == 1) &
+                            all(colSums(self$get_design()[,-1, drop=FALSE]) == 1)){
+                            private$df$qinf <- private$df$value
+                            private$df$qsup <- private$df$value
+                            skip_bootstrap = TRUE
                         }
+                    } else if (private$params[['assay']] == 'rnaseq' 
+                                            & ('bin' %in% colnames(private$df))){
+                        message('produce data frame : RNA-Seq binned')
+
+                        bootstrap_cols = quote(.(design, bin))
+                        unique_col = c("design", "bin")
                     }
-
-                    private$df <- private$df[, 
-                                c(out_cols) := bootstrap(.SD), 
-                                by = .(design, bin)]
-
-                    # checked : ok !
-                    private$df <- private$df[which(!duplicated(paste(
-                                    private$df$design,
-                                    private$df$bin))),]
                 }
+                
+                if(!skip_bootstrap) {
+                    private$df <- private$df[, 
+                                            c(out_cols) := bootstrap(.SD), 
+                                            by = eval(bootstrap_cols)]
+                }
+                private$df <- unique(private$df, by=unique_col)
+                
                 private$df <- as.data.frame(private$df)
-                #private$df$design <- as.factor(private$df$design)
                 private$df$group <- paste(private$df$design,
                                 private$df$region,
                                 sep="_")
