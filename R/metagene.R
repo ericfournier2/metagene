@@ -219,16 +219,6 @@ metagene <- R6Class("metagene",
                                 force_seqlevels = force_seqlevels, 
                                 assay = assay)
 
-            # Change bam_files pathes to absolute pathes
-            bam_files <- 
-                unlist(lapply(bam_files, function(x) if (substr(x,1,1) == '.') {
-                                            wd <- getwd()
-                                            paste0(wd,substr(x,2,500))
-                                        } else if (substr(x,1,1) == '~') {
-                                            normalizePath(x) 
-                                        } else {
-                                            x }))
-
             # Save params
             private$parallel_job <- Parallel_Job$new(cores)
             private$params[["padding_size"]] <- padding_size
@@ -242,9 +232,10 @@ metagene <- R6Class("metagene",
             private$params[["force_seqlevels"]] <- force_seqlevels
             private$params[["flip_regions"]] <- FALSE
             private$params[["assay"]] <- tolower(assay)
-            private$params[["df_needs_update"]] <- TRUE
             private$params[["df_arguments"]] <- ""
-            private$params[["table_needs_update"]] <- TRUE
+            
+            private$params[["alpha"]] <- 0.05
+            private$params[["sample_count"]] <- 1000
             
             # Prepare bam files
             private$print_verbose("Prepare bam files...")
@@ -260,7 +251,7 @@ metagene <- R6Class("metagene",
             # Parse bam files
             private$print_verbose("Parse bam files...\n")
             private$print_verbose("coverages...\n")
-            private$coverages <- private$produce_coverages()        
+            private$coverages <- private$produce_coverages()    
         },
         get_bam_count = function(filename) {
             # Parameters validation are done by Bam_Handler object
@@ -270,7 +261,7 @@ metagene <- R6Class("metagene",
             private$params
         },
         get_design = function() {
-            private$design
+            private$params$design
         },
         get_regions = function(region_names = NULL) {
             if (is.null(region_names)) {
@@ -345,7 +336,7 @@ metagene <- R6Class("metagene",
                     stopifnot(all(design_names %in% 
                                     unique(private$table$design)))
                 } else {
-                    design_names <- colnames(private$design)[-1]
+                    design_names <- colnames(private$params$design)[-1]
                 }
                 i <- (private$df$region %in% region_names &
                                     private$df$design %in% design_names)
@@ -384,47 +375,67 @@ metagene <- R6Class("metagene",
             
             # Calculate normalized coverages in parallel.
             coverage_names <- names(coverages)
-            coverages <-
-                private$parallel_job$launch_job(data = coverage_names,
-                                                FUN = normalize_coverage)
+            coverages <- private$parallel_job$launch_job(data = coverage_names,
+                                                         FUN = normalize_coverage)
             names(coverages) <- coverage_names
             coverages
         },
+        get_design_coverages = function(design=NA, noise_removal=NA, normalization=NA) {
+            if(design_coverage_need_update(design, normalization, noise_removal)) {
+                # Get the correct parameters.
+                design <- private$fetch_design(design)
+                noise_removal = private$get_param_value(noise_removal, "noise_removal")
+                normalization <- private$get_param_value(normalization, "normalization")
+                
+                # Get raw coverages
+                coverages <- private$coverages
+                
+                # Normalize if required.
+                if (!is.null(normalization)) {
+                    coverages <- private$get_normalized_coverages(coverages)
+                    message('Normalization done')
+                }
+                
+                # Merge the various samples, removing noise if it was requested.
+                if (!is.null(noise_removal)) {
+                    coverages <- private$remove_controls(coverages, design)
+                } else {
+                    coverages <- private$merge_chip(coverages, design)
+                }
+            
+                private$design_coverages <- coverages
+            }
+            return(private$design_coverages)
+        },
         add_design = function(design, check_bam_files = FALSE) {
-            private$design = private$fetch_design(design, check_bam_files)
-            private$params[["table_needs_update"]] <- TRUE
+            private$params$design = private$fetch_design(design, check_bam_files)
+            private$table <- NULL
         },
         produce_table = function(design = NA, bin_count = NA, bin_size = NULL,
                                 noise_removal = NA, normalization = NA,
                                 flip_regions = FALSE) {
             if (!is.null(bin_size)) {
                 warning("bin_size is now deprecated. Please use bin_count.")
-                bin_size <- NULL
             }
 
-            design <- private$fetch_design(design)
-            private$check_produce_table_params(bin_count = bin_count,
-                                                bin_size = bin_size,
-                                                design = design,
-                                                noise_removal = noise_removal,
-                                                normalization = normalization,
-                                                flip_regions = flip_regions)
-            bin_count <- private$get_param_value(bin_count, "bin_count")
-            noise_removal <- private$get_param_value(noise_removal,
-                                                    "noise_removal")
-            normalization <- private$get_param_value(normalization,
-                                                    "normalization")
-            
-
-            #addition of private$params[["table_needs_update"]] comes from 
-            #troubles in table update when adding a design with the add_design
-            #function and changing nothing else in produce_table parameters
             if (private$table_need_update(design = design,
-                                    bin_count = bin_count,
-                                    bin_size = bin_size,
-                                    noise_removal = noise_removal,
-                                    normalization = normalization) |
-                                    private$params[["table_needs_update"]]) {
+                                          bin_count = bin_count,
+                                          noise_removal = noise_removal,
+                                          normalization = normalization)) {            
+            
+                design <- private$fetch_design(design)
+
+                bin_count <- private$get_param_value(bin_count, "bin_count")
+                noise_removal <- private$get_param_value(noise_removal, "noise_removal")
+                normalization <- private$get_param_value(normalization, "normalization")
+                                                        
+                private$check_produce_table_params(bin_count = bin_count,
+                                                   design = design,
+                                                   noise_removal = noise_removal,
+                                                   normalization = normalization,
+                                                   flip_regions = flip_regions)
+
+                coverages <- private$coverages
                 
                 if (!is.null(normalization)) {
                     coverages <- self$get_normalized_coverages()
@@ -434,147 +445,7 @@ metagene <- R6Class("metagene",
                 }
                 
                 if (private$params[['assay']] == 'rnaseq'){
-                
-                    # here the word 'gene' = 'region'
-                    bam_files_names <- names(private$params[["bam_files"]])
-
-                    # useful variables for calculations of 
-                    # standard data table structure (std_dt_struct)
-                    gene_count <- length(private$regions)
-                    gene_names <- names(private$regions)
-                    exon_length_by_exon_by_gene <- width(private$regions)
-                    exon_length_by_exon_by_gene_cum <- vapply(
-                                exon_length_by_exon_by_gene, sum, numeric(1))
-
-                    exon_count_by_gene <- vapply(private$regions, length, 
-                                                                numeric(1))
-                    
-                    ## standard data table structure for one replicate
-                    col_gene <- rep(gene_names, times=unlist(map(
-                            1:gene_count, 
-                            ~sum(exon_length_by_exon_by_gene[[
-                                                        gene_names[.x]]]))))
-
-                    exon_names <- unlist(map(exon_count_by_gene, ~ 1:.x))
-                    col_exon <- as.vector(rep(exon_names, 
-                                times=unlist(exon_length_by_exon_by_gene)))
-                                
-                    col_exon_size <- rep(as.vector(#useful for flip function
-                            unlist(exon_length_by_exon_by_gene)), 
-                            times=as.vector(unlist(
-                                exon_length_by_exon_by_gene)))
-                                
-                    gene_size <- unlist(map(1:length(self$get_regions()), 
-                                    ~sum(width(self$get_regions()[[.x]]))))
-                    col_gene_size <- rep(gene_size, times = gene_size)
-                    
-                    gene_length_cum <- c(0,
-                                cumsum(gene_size)[-length(gene_size)])+1
-                    col_gene_start_nuc <- rep(gene_length_cum, 
-                                                        times = gene_size)
-                    
-                    col_nuc <- unlist(map(as.vector(unlist(
-                                exon_length_by_exon_by_gene_cum)), ~ 1:.x))
-                    
-                    exon_strand_by_exon_by_gene <- unlist(map(gene_names, 
-                                ~as.vector(strand(private$regions[[.x]]))))
-                    col_strand <- as.vector(rep(exon_strand_by_exon_by_gene,
-                                times=unlist(exon_length_by_exon_by_gene)))
-                
-                    
-                    length_std_dt_struct = length(col_gene)
-
-                    # the number of not empty cases in the design param
-                    copies_count <- sum(replace(unlist(design[,-1]),
-                                which(unlist(design[,-1]) == 2),1))
-
-                    #multiplication of standard data table structure
-                    col_gene <- rep(col_gene, copies_count)
-                    col_exon <- rep(col_exon, copies_count)
-                    col_nuctot <- 1:length(col_nuc)
-                    col_nuctot <- rep(col_nuctot, copies_count)
-                    col_nuc <- rep(col_nuc, copies_count)
-                    col_exon_size <- rep(col_exon_size, copies_count)
-                    col_gene_size <- rep(col_gene_size, copies_count)
-                    col_strand <- rep(col_strand, copies_count)
-                    col_gene_start_nuc <- rep(col_gene_start_nuc, 
-                                                        copies_count)
-                        
-                    ## other columns of data table
-                    design_names <- colnames(design)[-1]
-                    bam_names_in_design <- tools::file_path_sans_ext(
-                                                        basename(design[,1]))
-
-                    bfile_names_by_design <- tools::file_path_sans_ext(
-                        unlist(map(design_names , 
-                            ~design[which(design[,
-                                which(colnames(
-                                    design) == .x)] > 0),1])))
-                    col_bam <- rep(bfile_names_by_design,
-                            each=length_std_dt_struct)
-                    
-                    nb_bfile_by_design <- unlist(map(design_names , 
-                            ~length(which(design[,which(
-                            colnames(design) == .x)] > 0))))
-                    col_design <- rep(design_names,
-                                times=(nb_bfile_by_design *
-                                    length_std_dt_struct))
-                    
-                    ## col_values
-                    #NB : lapply(Views...) -> out of limits of view
-                    grtot <- self$get_regions()
-                    col_values <- list()
-                    idx <- 1 #index for col_values list
-                    idx_sd_loop <- 1 
-                    for(bam in bam_names_in_design) {
-                        for (i in 1:length(grtot)){
-                            gr <- grtot[[i]]
-                            sq <- unique(as.character(seqnames(gr)))
-                            val <- Views(
-                                coverages[[bam]][[sq]], 
-                                start(gr), 
-                                end(gr))
-                            col_values[[idx]] <- unlist(lapply(
-                            val, as.numeric))
-                            idx <- idx + 1
-                        }
-                    }
-                    col_values <- unlist(col_values)
-                    
-                    if (!is.null(bin_count)) {
-                        message('produce data table : RNA-Seq binned')
-                        col_bins <- trunc(
-                                    (col_nuc/(col_gene_size+1))*bin_count)+1
-                        col_bins <- as.integer(col_bins)
-                        
-                        private$table <- data.table(
-                                region = col_gene,
-                                exon = col_exon,
-                                bam = col_bam,
-                                design = col_design,
-                                bin = col_bins,
-                                nuc = col_nuc,
-                                nuctot = col_nuctot,
-                                exonsize = col_exon_size,
-                                regionsize = col_gene_size,
-                                regionstartnuc = col_gene_start_nuc,
-                                value = col_values,
-                                strand = col_strand)
-                    } else {
-                        message('produce data table : RNA-Seq')
-                        private$table <- data.table(
-                                region = col_gene,
-                                exon = col_exon,
-                                bam = col_bam,
-                                design = col_design,
-                                nuc = col_nuc,
-                                nuctot = col_nuctot,
-                                exonsize = col_exon_size,
-                                regionsize = col_gene_size,
-                                regionstartnuc = col_gene_start_nuc,
-                                value = col_values,
-                                strand = col_strand)
-                    }    
+                    private$table = private$produce_rna_table(coverages, design, self$get_regions(), bin_count)
                 } else { # chipseq
                     if (!is.null(noise_removal)) {
                         coverages <- private$remove_controls(coverages, design)
@@ -582,51 +453,17 @@ metagene <- R6Class("metagene",
                         coverages <- private$merge_chip(coverages, design)
                     }
                 
-                    message('produce data table : ChIP-Seq')
                     if (is.null(bin_count)) {
                         bin_count = 100
                     }
-                    region_length <- vapply(self$get_regions(), length, 
-                        numeric(1))
-                    col_regions <- names(self$get_regions()) %>%
-                        map(~ rep(.x, length(coverages) * bin_count * 
-                                    region_length[.x])) %>% unlist()
-                    col_designs <- map(region_length, ~ rep(names(coverages), 
-                                        each = bin_count * .x)) %>% unlist
-                    col_bins <- rep(1:bin_count,
-                                    length(coverages) * sum(region_length))
-                    pairs <- expand.grid(colnames(design)[-1], 
-                                        names(self$get_regions()), 
-                                        stringsAsFactors = FALSE)
-                    col_values <- map2(pairs$Var1, pairs$Var2,
-                        ~ private$get_subtable(coverages[[.x]], .y, 
-                            bin_count)) %>% unlist
-                    
-                    #TODO : improve col_strand production
-                    col_strand <- list()
-                    idx <- 1
-                    for (region_names in unique(col_regions)){
-                        col_strand[[idx]] <- rep(rep(
-                            as.vector(strand(private$regions)[[region_names]]),
-                            each=bin_count),length(unique(col_designs)))
-                        idx <- idx + 1
-                    }
-                    col_strand <- unlist(col_strand)
-                    
-                    private$table <- data.table(region = col_regions,
-                                design = col_designs,
-                                bin = col_bins,
-                                value = col_values,
-                                strand = col_strand)
+                    private$table <- private$produce_chip_table(coverages, design, self$get_regions(), bin_count)
                 }
 
-                private$params[["bin_size"]] <- bin_size
                 private$params[["bin_count"]] <- bin_count
                 private$params[["noise_removal"]] <- noise_removal
                 private$params[["normalization"]] <- normalization
-                private$params[["df_needs_update"]] <- TRUE
-                private$params[["table_needs_update"]] <- FALSE
-                private$design <- design
+                private$df <- NULL
+                private$params[["design"]] <- design
             } else {
                 message(paste('WARNING : table is unchanged regarding',
                     'design, bin_count, noise_removal, normalization.'))
@@ -642,7 +479,6 @@ metagene <- R6Class("metagene",
                                                     avoid_gaps = FALSE, 
                                                     bam_name = NULL, 
                                                     gaps_threshold = 0) {
-            
             #arguments checking
             stopifnot(is.numeric(alpha))
             stopifnot(is.numeric(sample_count))
@@ -656,7 +492,7 @@ metagene <- R6Class("metagene",
                 bam_names <- tools::file_path_sans_ext(basename(
                                                 private$params[["bam_files"]]))
                 if (!bam_name %in% bam_names){
-                    stop(paste("bam_name argument is no one of bam_names",
+                    stop(paste("bam_name argument is not one of bam_names",
                                         "provided to the metagene object"))
                 }
             }
@@ -671,10 +507,10 @@ metagene <- R6Class("metagene",
                                     
             if (private$params[["df_arguments"]] != list_of_arguments){
                 private$params[["df_arguments"]] <- list_of_arguments
-                private$params[["df_needs_update"]] <- TRUE
+                private$df <- NULL
             }
             
-            if (private$params[['df_needs_update']]){
+            if (is.null(private$df)) {
             
                 # 1. Get the correctly formatted table
                 if (is.null(self$get_table())) {
@@ -686,7 +522,6 @@ metagene <- R6Class("metagene",
             
                 if (private$params[['assay']] == 'chipseq') {
                     message('produce data frame : ChIP-Seq')
-                    private$data_frame_need_update(alpha, sample_count)
                     sample_size <- self$get_table()[bin == 1,][
                                             ,.N, by = .(region, design)][
                                             , .(min(N))]
@@ -712,7 +547,6 @@ metagene <- R6Class("metagene",
                 } else if (private$params[['assay']] == 'rnaseq' 
                                 & !('bin' %in% colnames(private$df))){
                     message('produce data frame : RNA-Seq')
-                    private$data_frame_need_update(alpha, sample_count)
 
                     
                     sample_size <- self$get_table()[nuc == 1,][
@@ -769,7 +603,6 @@ metagene <- R6Class("metagene",
                 } else if (private$params[['assay']] == 'rnaseq' 
                                         & ('bin' %in% colnames(private$df))){
                     message('produce data frame : RNA-Seq binned')
-                    private$data_frame_need_update(alpha, sample_count)
                         
                     sample_size <- self$get_table()[bin == 1,][
                                             ,.N, by = .(design)][
@@ -817,9 +650,7 @@ metagene <- R6Class("metagene",
                                 private$df$region,
                                 sep="_")
                 private$df$group <- as.factor(private$df$group)
-                
-                
-                private$params[["df_needs_update"]] <- FALSE
+
                 invisible(self)
             }
         },
@@ -874,12 +705,13 @@ metagene <- R6Class("metagene",
             invisible(self)
         }
     ),
-        private = list(
+    private = list(
         params = list(),
         regions = GRangesList(),
         table = data.table(),
         design = data.frame(),
         coverages = list(),
+        design_coverages = list(),
         df = data.frame(),
         graph = "",
         bam_handler = "",
@@ -964,7 +796,7 @@ metagene <- R6Class("metagene",
                 }
             }
         },
-        check_produce_table_params = function(bin_count, bin_size, design,
+        check_produce_table_params = function(bin_count, design,
                                                 noise_removal, normalization,
                                                 flip_regions) {
             # At least one file must be used in the design
@@ -996,9 +828,8 @@ metagene <- R6Class("metagene",
             }
             if (!identical(noise_removal, NA)) {
                 if (!is.null(noise_removal)) {
-                    if (!noise_removal %in% c("NCIS", "RPM")) {
-                        msg <- 'noise_removal must be NA, NULL, "NCIS" or '
-                        msg <- paste0(msg, '"RPM".')
+                    if (!noise_removal %in% c("NCIS")) {
+                        msg <- 'noise_removal must be NA, NULL, or "NCIS".'
                         stop(msg)
                     }
                 }
@@ -1016,53 +847,52 @@ metagene <- R6Class("metagene",
                 stop(msg)
             }
         },
-        table_need_update = function(design, bin_count, bin_size,
-                                        noise_removal, normalization) {
-            if (!identical(private$design, design)) {
-                return(TRUE)
+        # Determines if passed-in params match the ones in private$params.
+        # Parameters can be passed-in by name (noise_removal='NCIS'). If
+        # no name is provided, it is inferred from the passed in expression.
+        # So have_params_changed(noise_removal) will check private$params
+        # for a parameter named "noise_removal".
+        have_params_changed = function(...) {
+            # Get passed-in expressions in case the arguments were unnamed.
+            param_names_alt = sapply( substitute(list(...)), deparse)[-1]
+            
+            # Put arguments inside a list, and make sure there's at least one.
+            arg_list = list(...)
+            if(length(arg_list)==0) {
+                # No arguments means nothing has changed!
+                return(FALSE)
             }
-            if (!identical(private$params[["bin_count"]], bin_count)) {
-                return(TRUE)
+            
+            # Infer names
+            param_names = names(arg_list)
+            if(is.null(param_names)) {
+                param_names = param_names_alt
+            } else {
+                param_names = ifelse(param_names=="", param_names_alt, param_names)
             }
-            if (!identical(private$params[["noise_removal"]], noise_removal)) {
-                return(TRUE)
+        
+            ret_val = FALSE
+            for(i in 1:length(arg_list)) {
+                # NA value means "keep what we had", so obviously that did not change.
+                if(!is.na(arg_list[[i]])) {
+                    ret_val = ret_val || !identical(private$params[[param_names[i] ]], arg_list[[i]])
+                }
             }
-            if (!identical(private$params[["normalization"]], normalization)) {
-                return(TRUE)
-            }
-            return(FALSE)
+        
+            return(ret_val)
+        },
+        table_need_update = function(design, bin_count, 
+                                     noise_removal, normalization) {
+            return((length(private$table)==0) ||
+                   private$have_params_changed(design, bin_count,
+                                       noise_removal, normalization))
         },
         data_frame_need_update = function(alpha = NA, sample_count = NA) {
-            #need_update = FALSE
-            # Fetch saved values
-            alpha = private$get_param_value(alpha, "alpha")
-            sample_count = private$get_param_value(sample_count, 
-                                                    "sample_count")
-
-            # Add default, if needed
-            if (is.null(alpha)) {
-                alpha <- 0.05
-            }
-            if (is.null(sample_count)) {
-                sample_count <- 1000
-            }
-            if (nrow(private$df) == 0) {
-                private$params[['df_needs_update']] <- TRUE
-                #private$params[["alpha"]] <- alpha
-                #private$params[["sample_count"]] <- sample_count
-            } else {
-                # Check if data frame need update
-                if (!identical(private$params[["alpha"]], alpha)) {
-                    private$params[['df_needs_update']] <- TRUE
-                    #private$params[["alpha"]] <- alpha
-                }
-                if (!identical(private$params[["sample_count"]], 
-                                                    sample_count)) {
-                    private$params[['df_needs_update']] <- TRUE
-                    #private$params[["sample_count"]] <- sample_count
-                }
-            }
-            #need_update
+            return((length(private$df) == 0) || private$have_params_changed(alpha, sample_count))
+        },
+        design_coverage_need_update = function(design, normalization, noise_removal) {
+            return((length(private$design_coverages)==0) ||
+                   private$have_params_changed(design, normalization, noise_removal))
         },
         get_param_value = function(param_value, param_name) {
             param_name <- as.character(param_name)
@@ -1207,10 +1037,10 @@ metagene <- R6Class("metagene",
                 return(get_complete_design())
             }
             if (identical(design, NA)) {
-                if (all(dim(private$design) == c(0, 0))) {
+                if (all(dim(private$params$design) == c(0, 0))) {
                     return(get_complete_design())
                 } else {
-                    return(private$design)
+                    return(private$params$design)
                 }
             }
             design[,1] <- as.character(design[,1])
@@ -1270,7 +1100,7 @@ metagene <- R6Class("metagene",
                 private$table$bin[i] <- (self$get_params()$bin_count + 1) - 
                                                         private$table$bin[i]
                 private$table$bin <- as.integer(private$table$bin)
-                private$params[["df_needs_update"]] <- TRUE
+                private$df <- NULL
             } else if (private$params[['assay']] == 'rnaseq'){
                 message('RNA-Seq flip/unflip')
                 i <- which(private$table$strand == '-')
@@ -1289,11 +1119,11 @@ metagene <- R6Class("metagene",
                                                         private$table$bin[i]
                     private$table$bin <- as.integer(private$table$bin)
                 }
-                private$params[["df_needs_update"]] <- TRUE
+                private$df <- NULL
             }
         },
         get_bam_names = function(filenames) {
-            if (all(filenames %in% colnames(private$design)[-1])) {
+            if (all(filenames %in% colnames(private$params$design)[-1])) {
                 filenames
             } else {
                 stopifnot(private$check_bam_files(filenames))
@@ -1439,6 +1269,274 @@ metagene <- R6Class("metagene",
                                         *private$params[["bin_count"]])+1
                 private$df$bin <- as.integer(col_bins)
             }
+        },
+        get_design_names = function(design) {
+            if(is.null(design)) {
+                return(NULL)
+            } else {
+                return(colnames(design)[-1])
+            }
+        },
+        get_design_number = function(design) {
+            if(is.null(design)) {
+                return(NULL)
+            } else {
+                return(ncol(design) - 1)
+            }        
+        },
+        get_bam_in_design = function(design, design_name) {
+            private$get_x_in_design(design, design_name, 1)
+        },
+        get_control_in_design = function(design, design_name) {
+            private$get_x_in_design(design, design_name, 2)        
+        },
+        get_x_in_design = function(design, design_name, value) {
+            if(is.null(design)) {
+                return(NULL)
+            } else {
+                return(design$Samples[design[[design_name]] == value])
+            }        
+        },
+        get_bam_by_design = function(design) {
+            map(private$get_design_names(design), ~private$get_bam_in_design(design, .x))
+        },
+        # Function to generate a table for rna-seq data. 
+        # This is a workhorse function which assumes that all parameter
+        # validations have already been passed.
+        #
+        # Here we provide an example of the expected results for
+        # a design with two groups (d1 and d2) of two and one bam files respectively
+        # (b1 and b2 for d1, b3 for d2):
+        #  Samples   d1   d2
+        #     b1     1    0
+        #     b2     1    0
+        #     b3     0    1
+        #
+        # The resulting table holds its values in the following hierarchical order.
+        # Values are shown until they start repeating. Values preceded by
+        # a <- indicate that they can be directly inferred from the columns 
+        # to their left (Example: exon size can be inferred from exon number),
+        # and thus have the same cycle.
+        #
+        # Most columns have self-explanatory names, except three:
+        #  - nuc: represents the nucleotide position within the gene/region.
+        #  - regionstartnuc: Multiple genes are "linearized" in a virtual nucleotide space.
+        #                    Suppose gene 1 has 6 nucleotides, and gene 2 has five.
+        #                    Gene 1 occupies the [1,6] span of the linearized space,
+        #                    while gene 2 occupies the [7,11] span.
+        #                    This column indicates the start position of the gene
+        #                    within the linearized space. It would be 1 for gene 1,
+        #                    and 7 for gene 2.
+        #  - nuctot: The position in the linearized gene space.
+        #
+        # Note that nuc + regionstartnuc - 1 = nuctot.
+        #
+        # Here is the table representing the above examples. Note that the table
+        # may be post-processed by flip_regions before being returned.
+        #
+        # design | bam | region | regionsize | strand | regionstartnuc | exon | exonsize | bin | nuc | nuctot | value | 
+        #   d1   |  b1 |   r1   |    <- 6    |  <- +  |     <- 1       | r1e1 |   <- 3   |  1  |  1  |   1    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  1  |  2  |   2    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  2  |  3  |   3    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       | r1e2 |   <- 3   |  2  |  4  |   4    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  3  |  5  |   5    |   x   | 
+        #   .    |  .  |   .    |    <- 6    |  <- +  |     <- 1       |  .   |   <- 3   |  3  |  6  |   6    |   x   |    
+        #   .    |  .  |   r2   |    <- 5    |  <- -  |     <- 7       | r2e1 |   <- 5   |  1  |  1  |   7    |   x   | 
+        #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  1  |  2  |   8    |   x   | 
+        #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  2  |  3  |   9    |   x   | 
+        #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  2  |  4  |   10   |   x   | 
+        #   .    |  .  |   .    |    <- 5    |  <- -  |     <- 7       |  .   |   <- 5   |  3  |  5  |   11   |   x   | 
+        #   .    |  b2 |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |    
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |                     
+        #   d2   |  b3 |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   | 
+        #   .    |  .  |        |            |        |                |      |          |     |     |        |   x   |                     
+        produce_rna_table = function(coverages, design, regions, bin_count) {
+          
+            # Calculate useful variables. Here the word 'gene' = 'region'
+            gene_count <- length(regions)
+            gene_names <- names(regions)
+            exon_lengths <- width(regions)
+            gene_lengths <- vapply(exon_lengths, sum, numeric(1))
+            
+            # The number of rows/nucleotides for a region is the 
+            # sum of all exon lengths.
+            nuc_per_region = vapply(exon_lengths, sum, numeric(1))
+            
+            # The number of rows per bam file the total number of nucleotides
+            # within all regions.
+            row_per_bam = sum(nuc_per_region)
+ 
+            nb_bfile_by_design <- purrr::map_int(private$get_bam_by_design(design), ~length(.x))
+
+            ##### design column #####
+            # The number of rows per design is the number of nucleotides per region
+            # times the number of bams in that region.
+            rows_per_design = nb_bfile_by_design * row_per_bam
+            col_design <- rep(private$get_design_names(design), times=rows_per_design) 
+            
+            ##### bam column #####
+            col_bam = rep(unlist(private$get_bam_by_design(design)), each = row_per_bam)
+            
+            ##### region/gene columns #####
+            col_gene <- rep(gene_names, times=gene_lengths)
+            col_gene_size <- rep(gene_lengths, times=gene_lengths)
+            
+            # Strands are presumed to be identical throughout a region, so
+            # we only grab the first one.
+            strand_per_gene = unlist(lapply( strand(test_regions), function(x){as.character(x[1])}))
+            col_strand <- rep(strand_per_gene, times=gene_lengths)
+
+            gene_length_cum <- c(0, cumsum(gene_lengths)[-length(gene_lengths)])+1
+            col_gene_start_nuc <- rep(gene_length_cum, times = gene_lengths)
+            
+            ##### exon columns #####
+            exon_counts <- vapply(regions, length, numeric(1))                
+            exon_names <- unlist(map(exon_counts, ~ 1:.x))
+            v_exon_lengths = as.vector(unlist(exon_lengths))
+            col_exon <- as.vector(rep(exon_names, times=v_exon_lengths))
+            
+            #useful for flip function            
+            col_exon_size <- rep(v_exon_lengths, times=v_exon_lengths)
+                        
+            ##### nuc/bin columns #####
+            col_nuc_tot = 1:row_per_bam
+            col_nuc = (col_nuc_tot - col_gene_start_nuc) + 1
+
+            if (!is.null(bin_count)) {
+                col_bins <- as.integer(trunc((col_nuc/col_gene_size)*bin_count)+1)
+            } else {
+                col_bins = col_nuc
+            }
+                        
+            ## col_values
+            #NB : lapply(Views...) -> out of limits of view
+            grtot <- self$get_regions()
+            col_values <- list()
+            idx <- 1 #index for col_values list
+            idx_sd_loop <- 1 
+            for(bam in unlist(private$get_bam_by_design(design))) {
+                bam_name = tools::file_path_sans_ext(basename(bam))
+                for (i in 1:length(grtot)){
+                    r <- grtot[[i]]
+                    q <- unique(as.character(seqnames(gr)))
+                    val <- Views(
+                        coverages[[bam_name]][[sq]], 
+                        start(gr), 
+                        end(gr))
+                    col_values[[idx]] <- unlist(lapply(val, as.numeric))
+                    idx <- idx + 1
+                }
+            }
+            col_values <- unlist(col_values)
+            
+            message('produce data table : RNA-Seq')                                        
+            return(data.table(region = col_gene,
+                              exon = col_exon,
+                              bam = col_bam,
+                              design = col_design,
+                              bin = col_bins,
+                              nuc = col_nuc,
+                              nuctot = 1:length(col_nuc),
+                              exonsize = col_exon_size,
+                              regionsize = col_gene_size,
+                              regionstartnuc = col_gene_start_nuc,
+                              value = col_values,
+                              strand = col_strand))
+        },
+        # Function to generate a table for chip-seq data. 
+        # This is a workhorse function which assumes that all parameter
+        # validations have already been passed.
+        #
+        # Here we provide an example of the expected results for two regions
+        # (Each with two ranges) and two designs.
+        #
+        # The resulting table holds its values in the following hierarchical order.
+        # Values are shown until they start repeating.
+        #
+        # Note that "bin" repeats as many times as there are ranges within
+        # the given region.
+        #
+        # Here is the table representing the above examples. Note that the table
+        # may be post-processed by flip_regions before being returned.
+        #
+        # region | design |    bin     | value | strand |
+        #   r1   |  d1    |     1      |   x   |   +    |
+        #   .    |  .     |     .      |   x   |   +    |
+        #   .    |  .     |  bin_count |   x   |   +    |
+        #   .    |  .     |     1      |   x   |   -    |   
+        #   .    |  .     |     .      |   x   |   -    |
+        #   .    |  .     |  bin_count |   x   |   -    |
+        #   .    |  d2    |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |   
+        #   r2   |  d1    |            |   x   |   -    |
+        #   .    |  .     |            |   x   |   -    |
+        #   .    |  .     |            |   x   |   -    |
+        #   .    |  .     |            |   x   |   +    |
+        #   .    |  .     |            |   x   |   +    |
+        #   .    |  .     |            |   x   |   +    |
+        #   .    |  d2    |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        #   .    |  .     |            |   x   |        |
+        produce_chip_table = function(coverages, design, regions, bin_count) {
+            message('produce data table : ChIP-Seq')
+            region_length <- vapply(regions, length, numeric(1))
+            col_regions <- names(regions) %>%
+                map(~ rep(.x, length(coverages) * bin_count * 
+                            region_length[.x])) %>% unlist()
+            col_designs <- map(region_length, ~ rep(names(coverages), 
+                                each = bin_count * .x)) %>% unlist
+            col_bins <- rep(1:bin_count,
+                            length(coverages) * sum(region_length))
+            pairs <- expand.grid(colnames(design)[-1], 
+                                names(regions), 
+                                stringsAsFactors = FALSE)
+            col_values <- map2(pairs$Var1, pairs$Var2,
+                ~ private$get_subtable(coverages[[.x]], .y, 
+                    bin_count)) %>% unlist
+            
+            #TODO : improve col_strand production
+            # Vectorize? Slower than loop with small data set.
+            # col_strand = unlist(lapply((lapply(lapply(strand(regions), rep, each=bin_count), rep, length(names(coverages)))), as.vector))
+            
+            col_strand <- list()
+            idx <- 1
+            for (region_names in unique(col_regions)){
+                col_strand[[idx]] <- rep(rep(
+                    as.vector(strand(regions)[[region_names]]),
+                    each=bin_count),length(unique(col_designs)))
+                idx <- idx + 1
+            }
+            col_strand <- unlist(col_strand)
+            
+            return(data.table(region = col_regions,
+                              design = col_designs,
+                              bin = col_bins,
+                              value = col_values,
+                              strand = col_strand))
         }
     )
 )
