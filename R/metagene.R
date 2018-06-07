@@ -358,7 +358,7 @@ metagene <- R6Class("metagene",
                 stopifnot(length(filenames) > 0)
                 bam_names <- private$get_bam_names(filenames)
                 stopifnot(length(bam_names) == length(filenames))
-                private$coverages[bam_names]
+                lapply(private$coverages, function(x) { x[bam_names] })
             }
         },
         get_normalized_coverages = function(filenames = NULL) {
@@ -366,47 +366,53 @@ metagene <- R6Class("metagene",
             # BAM file.
             normalize_coverage <- function(filename) {
                 count <- private$bam_handler$get_aligned_count(filename)
-                    weight <- 1 / (count / 1000000)
-                    coverages[[filename]] <- coverages[[filename]] * weight
+                weight <- 1 / (count / 1000000)
+                for(strand in c("+", "-", "*")) {
+                    if(!is.null(coverages[[strand]])) {
+                        coverages[[strand]][[filename]] <- coverages[[strand]][[filename]] * weight
+                    }
+                }
             }
             
             # Get the raw coverages.
             coverages <- self$get_raw_coverages(filenames)
             
             # Calculate normalized coverages in parallel.
-            coverage_names <- names(coverages)
+            coverage_names <- private$get_coverage_names(coverages)
             coverages <- private$parallel_job$launch_job(data = coverage_names,
                                                          FUN = normalize_coverage)
-            names(coverages) <- coverage_names
+            for(strand in c("+", "-", "*")) {                                                
+                names(coverages[[strand]]) <- coverage_names
+            }
             coverages
         },
-        get_design_coverages = function(design=NA, noise_removal=NA, normalization=NA) {
-            if(design_coverage_need_update(design, normalization, noise_removal)) {
-                # Get the correct parameters.
-                design <- private$fetch_design(design)
-                noise_removal = private$get_param_value(noise_removal, "noise_removal")
-                normalization <- private$get_param_value(normalization, "normalization")
-                
-                # Get raw coverages
-                coverages <- private$coverages
-                
-                # Normalize if required.
-                if (!is.null(normalization)) {
-                    coverages <- private$get_normalized_coverages(coverages)
-                    message('Normalization done')
-                }
-                
-                # Merge the various samples, removing noise if it was requested.
-                if (!is.null(noise_removal)) {
-                    coverages <- private$remove_controls(coverages, design)
-                } else {
-                    coverages <- private$merge_chip(coverages, design)
-                }
-            
-                private$design_coverages <- coverages
-            }
-            return(private$design_coverages)
-        },
+        #get_design_coverages = function(design=NA, noise_removal=NA, normalization=NA) {
+        #    if(design_coverage_need_update(design, normalization, noise_removal)) {
+        #        # Get the correct parameters.
+        #        design <- private$fetch_design(design)
+        #        noise_removal = private$get_param_value(noise_removal, "noise_removal")
+        #        normalization <- private$get_param_value(normalization, "normalization")
+        #        
+        #        # Get raw coverages
+        #        coverages <- private$coverages
+        #        
+        #        # Normalize if required.
+        #        if (!is.null(normalization)) {
+        #            coverages <- private$get_normalized_coverages(coverages)
+        #            message('Normalization done')
+        #        }
+        #        
+        #        # Merge the various samples, removing noise if it was requested.
+        #        if (!is.null(noise_removal)) {
+        #            coverages <- private$remove_controls(coverages, design)
+        #        } else {
+        #            coverages <- private$merge_chip(coverages, design)
+        #        }
+        #    
+        #        private$design_coverages <- coverages
+        #    }
+        #    return(private$design_coverages)
+        #},
         add_design = function(design, check_bam_files = FALSE) {
             private$params$design = private$fetch_design(design, check_bam_files)
             private$table <- NULL
@@ -435,30 +441,39 @@ metagene <- R6Class("metagene",
                                                    normalization = normalization,
                                                    flip_regions = flip_regions)
 
-                coverages <- private$coverages
-                
                 if (!is.null(normalization)) {
                     coverages <- self$get_normalized_coverages()
                     message('Normalization done')
                 } else {
                     coverages <- self$get_raw_coverages()
                 }
-                
-                if (private$params[['assay']] == 'rnaseq'){
-                    private$table = private$produce_rna_table(coverages, design, self$get_regions(), bin_count)
-                } else { # chipseq
-                    if (!is.null(noise_removal)) {
-                        coverages <- private$remove_controls(coverages, design)
+
+                # Loop over all strands, building a table for each.
+                table_list = list()
+                for(strand_name in c('+', '-', '*'))
+                    if(is.null(coverages[[strand_name]])) {
+                        table_list[[strand_name]] = NULL
                     } else {
-                        coverages <- private$merge_chip(coverages, design)
+                        if (private$params[['assay']] == 'rnaseq') {
+                            table_list[[strand_name]] = private$produce_rna_table(coverages, design, self$get_regions(), bin_count)
+                        } else { # chipseq
+                            if (!is.null(noise_removal)) {
+                                coverages[[strand_name]] <- private$remove_controls(coverages[[strand_name]], design)
+                            } else {
+                                coverages[[strand_name]] <- private$merge_chip(coverages[[strand_name]], design)
+                            }
+                        
+                            if (is.null(bin_count)) {
+                                bin_count = 100
+                            }
+                            table_list[[strand_name]] <- private$produce_chip_table(coverages, design, self$get_regions(), bin_count)
+                        }
                     }
-                
-                    if (is.null(bin_count)) {
-                        bin_count = 100
-                    }
-                    private$table <- private$produce_chip_table(coverages, design, self$get_regions(), bin_count)
                 }
 
+                # Merge coverage tables.
+                private$table = do.call(rbind, table_list)
+                
                 private$params[["bin_count"]] <- bin_count
                 private$params[["noise_removal"]] <- noise_removal
                 private$params[["normalization"]] <- normalization
@@ -981,14 +996,14 @@ metagene <- R6Class("metagene",
             }))
         },
         produce_coverages = function() {
-        regions <- GenomicRanges::reduce(BiocGenerics::unlist(private$regions))
+            regions <- GenomicRanges::reduce(BiocGenerics::unlist(private$regions))
             res <- private$parallel_job$launch_job(
                         data = private$params[["bam_files"]],
                         FUN = private$bam_handler$get_coverage,
                         regions = regions,
                         force_seqlevels= private$params[["force_seqlevels"]])
             names(res) <- names(private$params[["bam_files"]])
-            lapply(res, GenomeInfoDb::sortSeqlevels)
+            lapply(res, function(x) { lapply(x, GenomeInfoDb::sortSeqlevels)})
         },
         plot_graphic = function(df, title, x_label) {
             # Prepare x label
@@ -1537,6 +1552,16 @@ metagene <- R6Class("metagene",
                               bin = col_bins,
                               value = col_values,
                               strand = col_strand))
+        },
+        get_coverage_names = function(coverages) {
+            stopifnot(length(setdiff(names(coverages), c("+", "-", "*")))==0)
+            if(!is.null(coverages[['+']])) {
+                return(names(coverages[['+']]))
+            } if(!is.null(coverages[['-']])) {
+                return(names(coverages[['-']]))
+            } if(!is.null(coverages[['*']])) {
+                return(names(coverages[['*']]))
+            }
         }
     )
 )

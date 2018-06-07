@@ -395,26 +395,27 @@ Bam_Handler <- R6Class("Bam_Handler",
                                                strand_specific=FALSE,
                                                paired_end_strand_mode=2){
             if(!strand_specific) {
-                alignment = private$read_alignments(regions, bam_file, paired_end=paired_end,
-                                                    paired_end_strand_mode=paired_end_strand_mode)
+                alignment = list('+'=NULL, '-'=NULL,
+                                 '*'=private$read_alignments(regions, bam_file, paired_end=paired_end,
+                                                             paired_end_strand_mode=paired_end_strand_mode)
             } else {
                 # Read regions on each strand separately.
-                alignment = c(private$read_alignments(regions, bam_file, '+',
-                                                      paired_end=paired_end,
-                                                      paired_end_strand_mode=paired_end_strand_mode),
-                              private$read_alignments(regions, bam_file, '-',
-                                                      paired_end=paired_end,
-                                                      paired_end_strand_mode=paired_end_strand_mode),
-                              private$read_alignments(regions, bam_file, '*',
-                                                      paired_end=paired_end,
-                                                      paired_end_strand_mode=paired_end_strand_mode))
+                alignment = list('+'=private$read_alignments(regions, bam_file, '+',
+                                                             paired_end=paired_end,
+                                                             paired_end_strand_mode=paired_end_strand_mode),
+                                 '-'=private$read_alignments(regions, bam_file, '-',
+                                                             paired_end=paired_end,
+                                                             paired_end_strand_mode=paired_end_strand_mode),
+                                 '*'=private$read_alignments(regions, bam_file, '*',
+                                                             paired_end=paired_end,
+                                                             paired_end_strand_mode=paired_end_strand_mode))
             }
                 
             if (!is.null(count)) {
                 weight <- 1 / (count / 1000000)
-                GenomicAlignments::coverage(alignment) * weight
+                return(lapply(alignment, function(x) { GenomicAlignments::coverage(x) * weight}))
             } else {
-                GenomicAlignments::coverage(alignment)
+                return(lapply(alignment, GenomicAlignments::coverage))
             }
         },
         generic_get_coverage = function(bam_file, regions, force_seqlevels = FALSE, count=NULL) {
