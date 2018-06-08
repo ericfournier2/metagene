@@ -1389,7 +1389,7 @@ metagene <- R6Class("metagene",
             
             # Strands are presumed to be identical throughout a region, so
             # we only grab the first one.
-            strand_per_gene = unlist(lapply( strand(test_regions), function(x){as.character(x[1])}))
+            strand_per_gene = unlist(lapply( strand(regions), function(x){as.character(x[1])}))
             col_strand <- rep(strand_per_gene, times=gene_lengths)
 
             gene_length_cum <- c(0, cumsum(gene_lengths)[-length(gene_lengths)])+1
@@ -1423,8 +1423,8 @@ metagene <- R6Class("metagene",
             for(bam in unlist(private$get_bam_by_design(design))) {
                 bam_name = tools::file_path_sans_ext(basename(bam))
                 for (i in 1:length(grtot)){
-                    r <- grtot[[i]]
-                    q <- unique(as.character(seqnames(gr)))
+                    gr <- grtot[[i]]
+                    sq <- unique(as.character(seqnames(gr)))
                     val <- Views(
                         coverages[[bam_name]][[sq]], 
                         start(gr), 
