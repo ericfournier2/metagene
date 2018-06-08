@@ -232,6 +232,7 @@ metagene <- R6Class("metagene",
             private$params[["force_seqlevels"]] <- force_seqlevels
             private$params[["flip_regions"]] <- FALSE
             private$params[["assay"]] <- tolower(assay)
+            private$params[["strand_specific"]] <- strand_specific
             private$params[["df_arguments"]] <- ""
             
             private$params[["alpha"]] <- 0.05
@@ -351,40 +352,18 @@ metagene <- R6Class("metagene",
             }
         },
         get_raw_coverages = function(filenames = NULL) {
-            if (is.null(filenames)) {
-                private$coverages
+            if(!private$params[['strand_specific']]) {
+                return(private$get_raw_coverages_internal(filenames)[['*']])
             } else {
-                stopifnot(is.character(filenames))
-                stopifnot(length(filenames) > 0)
-                bam_names <- private$get_bam_names(filenames)
-                stopifnot(length(bam_names) == length(filenames))
-                lapply(private$coverages, function(x) { x[bam_names] })
-            }
+                return(private$get_raw_coverages_internal(filenames))
+            }        
         },
         get_normalized_coverages = function(filenames = NULL) {
-            # Define a function which will normalize coverage for a single
-            # BAM file.
-            normalize_coverage <- function(filename) {
-                count <- private$bam_handler$get_aligned_count(filename)
-                weight <- 1 / (count / 1000000)
-                for(strand in c("+", "-", "*")) {
-                    if(!is.null(coverages[[strand]])) {
-                        coverages[[strand]][[filename]] <- coverages[[strand]][[filename]] * weight
-                    }
-                }
+            if(!private$params[['strand_specific']]) {
+                return(private$get_normalized_coverages_internal(filenames)[['*']])
+            } else {
+                return(private$get_normalized_coverages_internal(filenames))
             }
-            
-            # Get the raw coverages.
-            coverages <- self$get_raw_coverages(filenames)
-            
-            # Calculate normalized coverages in parallel.
-            coverage_names <- private$get_coverage_names(coverages)
-            coverages <- private$parallel_job$launch_job(data = coverage_names,
-                                                         FUN = normalize_coverage)
-            for(strand in c("+", "-", "*")) {                                                
-                names(coverages[[strand]]) <- coverage_names
-            }
-            coverages
         },
         #get_design_coverages = function(design=NA, noise_removal=NA, normalization=NA) {
         #    if(design_coverage_need_update(design, normalization, noise_removal)) {
@@ -442,10 +421,10 @@ metagene <- R6Class("metagene",
                                                    flip_regions = flip_regions)
 
                 if (!is.null(normalization)) {
-                    coverages <- self$get_normalized_coverages()
+                    coverages <- private$get_normalized_coverages_internal()
                     message('Normalization done')
                 } else {
-                    coverages <- self$get_raw_coverages()
+                    coverages <- private$get_raw_coverages_internal()
                 }
 
                 # Loop over all strands, building a table for each.
@@ -534,85 +513,12 @@ metagene <- R6Class("metagene",
                 }
             
                 # 2. Produce the data.frame 
-                private$df <- data.table::copy(self$get_table())
-            
-                if(private$params[['assay']]=='rnaseq' && !is.null(private$params[['bin_count']])) {
-                    sample_size_columns = quote(.(region, design))
-                } else {
-                    sample_size_columns = quote(.(design))
-                }
-            
-                # Set up bootstrap analysis.
-                sample_size <- self$get_table()[bin == 1,][
-                                        ,.N, by = eval(sample_size_columns)][
-                                        , .(min(N))]
-                sample_size <- as.integer(sample_size)
-
-                out_cols <- c("value", "qinf", "qsup")
-                bootstrap <- function(df) {
-                    sampling <- matrix(df$value[sample(seq_along(df$value),
-                                            sample_size * sample_count,
-                                            replace = TRUE)],
-                                    ncol = sample_size)
-                    values <- colMeans(sampling)
-                    res <- quantile(values, c(alpha/2, 1-(alpha/2)))
-                    res <- c(mean(df$value), res)
-                    names(res) <- out_cols
-                    as.list(res)
-                }            
-            
-                skip_bootstrap = FALSE
-                if (private$params[['assay']] == 'chipseq') {
-                    message('produce data frame : ChIP-Seq')
-
-                    bootstrap_cols = quote(.(region, design, bin))
-                    unique_col = c("region", "design", "bin", "strand")
-                } else {
-                    if(avoid_gaps){
-                        if (!is.null(bam_name)){
-                            private$data_frame_avoid_gaps_updates(bam_name,
-                                                        gaps_threshold)
-                        } else {
-                            private$data_frame_avoid_gaps_updates(
-                                                        private$df$bam[1], 
-                                                        gaps_threshold)
-                        }
-                    }                
-                
-                    if (is.null(private$params[['bin_count']])) {
-                        message('produce data frame : RNA-Seq')
-                        
-                        bootstrap_cols = quote(.(region, design, nuctot))
-                        unique_col = c("region", "design", "nuctot")
-                        
-                        if(all(rowSums(self$get_design()[,-1, drop=FALSE]) == 1) &
-                            all(colSums(self$get_design()[,-1, drop=FALSE]) == 1)){
-                            private$df$qinf <- private$df$value
-                            private$df$qsup <- private$df$value
-                            skip_bootstrap = TRUE
-                        }
-                    } else if (private$params[['assay']] == 'rnaseq' 
-                                            & ('bin' %in% colnames(private$df))){
-                        message('produce data frame : RNA-Seq binned')
-
-                        bootstrap_cols = quote(.(design, bin))
-                        unique_col = c("design", "bin")
-                    }
-                }
-                
-                if(!skip_bootstrap) {
-                    private$df <- private$df[, 
-                                            c(out_cols) := bootstrap(.SD), 
-                                            by = eval(bootstrap_cols)]
-                }
-                private$df <- unique(private$df, by=unique_col)
-                
-                private$df <- as.data.frame(private$df)
-                private$df$group <- paste(private$df$design,
-                                private$df$region,
-                                sep="_")
-                private$df$group <- as.factor(private$df$group)
-
+                private$df <- produce_data_frame_internal(input_table=self$get_table(),
+                    alpha=alpha, sample_count=sample_count, avoid_gaps=avoid_gaps, 
+                    gaps_threshold=gaps_threshold, bam_name=bam_name,
+                    assay=private$params[['assay']], input_design=self$get_design,  
+                    bin_count=private$params[['bin_count']])
+                    
                 invisible(self)
             }
         },
@@ -1128,11 +1034,12 @@ metagene <- R6Class("metagene",
             },
             logical(1)))
         },
-        data_frame_avoid_gaps_updates = function(bam_name, gaps_threshold) {
+        data_frame_avoid_gaps = function(input_df, bam_name, gaps_threshold) {
             #bootstrap not executed at this point. Don't work on design !
             
             #how_namy_by_exon_by_design
             dfdt <- data.table::copy(private$df)
+            work_df = data.table::copy(input_df)
             nb_nuc_removed <- dfdt[value <= gaps_threshold 
                                     & bam == bam_name, length(value),
                                 by=c('exon', 'region')]
@@ -1141,13 +1048,13 @@ metagene <- R6Class("metagene",
             for (i in 1:length(nb_nuc_removed$V1)){
                 #selected = lines of the ith region and exon of nb_nuc_removed
                 selected <- which(
-                    private$df$region == nb_nuc_removed$region[i] &
-                    private$df$exon == nb_nuc_removed$exon[i])
+                    work_df$region == nb_nuc_removed$region[i] &
+                    work_df$exon == nb_nuc_removed$exon[i])
                 #retrieve the exonsize value of the ith region and exon
-                original_exonsize <- unique(private$df$exonsize[selected])
+                original_exonsize <- unique(work_df$exonsize[selected])
                 #replace former exonsixe
                 new_exonsize <- original_exonsize-nb_nuc_removed$V1[i]
-                private$df$exonsize[selected] <- new_exonsize
+                work_df$exonsize[selected] <- new_exonsize
             }
             
             nb_nuc_removed_by_gene <- dfdt[value <= gaps_threshold 
@@ -1157,13 +1064,13 @@ metagene <- R6Class("metagene",
             for (i in 1:length(unique(nb_nuc_removed_by_gene$region))){
                 #selected = lines of the ith region of nb_nuc_removed
                 selected <- which(
-                    private$df$region == nb_nuc_removed_by_gene$region[i])
+                    work_df$region == nb_nuc_removed_by_gene$region[i])
                 #retrieve the regionsize value of the ith region and exon
-                original_regionsize <- unique(private$df$regionsize[selected])
+                original_regionsize <- unique(work_df$regionsize[selected])
                 #replace former regionsize
                 new_regionsize <- (original_regionsize
                                     - nb_nuc_removed_by_gene$V1[i])
-                private$df$regionsize[selected] <- new_regionsize
+                work_df$regionsize[selected] <- new_regionsize
             }
             
             ### removal of zero values
@@ -1171,93 +1078,95 @@ metagene <- R6Class("metagene",
             stopifnot(length(unique(private$table[, .N, by=bam]$N)) == 1)
             bam_line_count <- private$table[bam == bam_name, .N]
             #lines_to_remove for bam_name
-            lines_to_remove <- which(private$df$bam == bam_name &
-                                            private$df$value <= gaps_threshold)
+            lines_to_remove <- which(work_df$bam == bam_name &
+                                            work_df$value <= gaps_threshold)
             # %% provide the idx for the first bam
             lines_to_remove <- (lines_to_remove %% bam_line_count)
             #to avoid 0 if there is a x %% x = 0
             lines_to_remove <- replace(lines_to_remove, 
                                     which(lines_to_remove == 0), 
                                     bam_line_count)
-            bam_count <- length(unique(private$df$bam))
+            bam_count <- length(unique(work_df$bam))
             #lines_to_remove for all bam
             lines_to_remove <- unlist(map((0:(bam_count-1)), 
                                 ~ lines_to_remove + bam_line_count * .x))
-            private$df <- private$df[-lines_to_remove,]
+            work_df <- work_df[-lines_to_remove,]
 
             
             #reinitialization of nuctot before flip in next section to 
             # clear gaps in nuctot number seauence
-            private$df$nuctot <- rep(1:length(which(
-                            private$df$bam == bam_name)),
-                            times = length(unique(private$df$bam)))
+            work_df$nuctot <- rep(1:length(which(
+                            work_df$bam == bam_name)),
+                            times = length(unique(work_df$bam)))
             
             #reorder the nuc and nuctot variables
             if(private$params[["flip_regions"]] == TRUE){
-                flip_by_bam_n_region <- map2(rep(unique(private$df$bam), 
-                            each=length(unique(private$df$region))), 
-                    rep(unique(private$df$region),
-                            times=length(unique(private$df$bam))), 
-                    ~which(private$df$bam == .x & private$df$region == .y 
-                                & private$df$strand == '-'))
+                flip_by_bam_n_region <- map2(rep(unique(work_df$bam), 
+                            each=length(unique(work_df$region))), 
+                    rep(unique(work_df$region),
+                            times=length(unique(work_df$bam))), 
+                    ~which(work_df$bam == .x & work_df$region == .y 
+                                & work_df$strand == '-'))
                 
                 not_empty_idx <- which(map(flip_by_bam_n_region, 
                                                         ~length(.x)) > 0) 
                 if (length(not_empty_idx) > 0){
                     map(flip_by_bam_n_region[not_empty_idx],
-                                    ~ (private$df$nuc[.x] <- length(.x):1))
+                                    ~ (work_df$nuc[.x] <- length(.x):1))
                     map(flip_by_bam_n_region[not_empty_idx],
-                                    ~ (private$df$nuctot[.x] <- 
-                                            max(private$df$nuctot[.x]):
-                                                min(private$df$nuctot[.x])))
+                                    ~ (work_df$nuctot[.x] <- 
+                                            max(work_df$nuctot[.x]):
+                                                min(work_df$nuctot[.x])))
                 }
                 
-                unflip_by_bam_n_region <- map2(rep(unique(private$df$bam), 
-                            each=length(unique(private$df$region))), 
-                    rep(unique(private$df$region), 
-                            times=length(unique(private$df$bam))), 
-                    ~which(private$df$bam == .x & private$df$region == .y 
-                                & (private$df$strand == '+' | 
-                                    private$df$strand == '*')))
+                unflip_by_bam_n_region <- map2(rep(unique(work_df$bam), 
+                            each=length(unique(work_df$region))), 
+                    rep(unique(work_df$region), 
+                            times=length(unique(work_df$bam))), 
+                    ~which(work_df$bam == .x & work_df$region == .y 
+                                & (work_df$strand == '+' | 
+                                    work_df$strand == '*')))
                 not_empty_idx <- which(map(unflip_by_bam_n_region, 
                                                         ~length(.x)) > 0) 
                 if (length(not_empty_idx) > 0){
                     map(unflip_by_bam_n_region[not_empty_idx],
-                                    ~ (private$df$nuc[.x] <- 1:length(.x)))
+                                    ~ (work_df$nuc[.x] <- 1:length(.x)))
                     map(unflip_by_bam_n_region[not_empty_idx],
-                                    ~ (private$df$nuctot[.x] <- 
-                                            min(private$df$nuctot[.x]):
-                                                max(private$df$nuctot[.x])))
+                                    ~ (work_df$nuctot[.x] <- 
+                                            min(work_df$nuctot[.x]):
+                                                max(work_df$nuctot[.x])))
                 }
             } else { # if private$params[["flip_regions"]] == FALSE
-                by_bam_n_region <- map2(rep(unique(private$df$bam), 
-                            each=length(unique(private$df$region))), 
-                    rep(unique(private$df$region), 
-                            times=length(unique(private$df$bam))), 
-                    ~which(private$df$bam == .x & private$df$region == .y))
+                by_bam_n_region <- map2(rep(unique(work_df$bam), 
+                            each=length(unique(work_df$region))), 
+                    rep(unique(work_df$region), 
+                            times=length(unique(work_df$bam))), 
+                    ~which(work_df$bam == .x & work_df$region == .y))
                 not_empty_idx <- which(map(by_bam_n_region, 
                                                         ~length(.x)) > 0) 
                 if (length(not_empty_idx) > 0){
                     map(by_bam_n_region[not_empty_idx], 
-                                    ~ (private$df$nuc[.x] <- 1:length(.x)))
+                                    ~ (work_df$nuc[.x] <- 1:length(.x)))
                     map(by_bam_n_region[not_empty_idx], 
-                                    ~ (private$df$nuctot[.x] <- 
-                                            min(private$df$nuctot[.x]):
-                                                max(private$df$nuctot[.x])))
+                                    ~ (work_df$nuctot[.x] <- 
+                                            min(work_df$nuctot[.x]):
+                                                max(work_df$nuctot[.x])))
                 }
             }
             if(!is.null(private$params[["bin_count"]])){
                 #reinitialization of region/gene_size to be able to rebuild 
                 #bin column
-                length_by_region_n_bam <- private$df[,length(nuc),
+                length_by_region_n_bam <- work_df[,length(nuc),
                                                     by=c('region','bam')]$V1
-                private$df$regionsize <- rep(length_by_region_n_bam, 
+                work_df$regionsize <- rep(length_by_region_n_bam, 
                                             times=length_by_region_n_bam)
                 #rebuild the correct bin column
-                col_bins <- trunc((private$df$nuc/(private$df$regionsize+1))
+                col_bins <- trunc((work_df$nuc/(work_df$regionsize+1))
                                         *private$params[["bin_count"]])+1
-                private$df$bin <- as.integer(col_bins)
+                work_df$bin <- as.integer(col_bins)
             }
+            
+            return(work_df)
         },
         get_design_names = function(design) {
             if(is.null(design)) {
@@ -1536,6 +1445,117 @@ metagene <- R6Class("metagene",
             } else if(!is.null(coverages[['*']])) {
                 return(names(coverages[['*']]))
             }
-        }
+        },
+        produce_data_frame_internal = function(input_table, alpha, sample_count,
+                            avoid_gaps, gaps_threshold, bam_name,
+                            assay, input_design, bin_count) {
+            results <- data.table::copy(input_table)
+            
+            if(assay=='rnaseq' && !is.null(bin_count)) {
+                sample_size_columns = quote(.(region, design))
+            } else {
+                sample_size_columns = quote(.(design))
+            }
+        
+            # Set up bootstrap analysis.
+            sample_size <- input_table[bin == 1,][
+                                    ,.N, by = eval(sample_size_columns)][
+                                    , .(min(N))]
+            sample_size <- as.integer(sample_size)
+        
+            out_cols <- c("value", "qinf", "qsup")
+            bootstrap <- function(df) {
+                sampling <- matrix(df$value[sample(seq_along(df$value),
+                                        sample_size * sample_count,
+                                        replace = TRUE)],
+                                ncol = sample_size)
+                values <- colMeans(sampling)
+                res <- quantile(values, c(alpha/2, 1-(alpha/2)))
+                res <- c(mean(df$value), res)
+                names(res) <- out_cols
+                as.list(res)
+            }            
+        
+            skip_bootstrap = FALSE
+            if (assay == 'chipseq') {
+                message('produce data frame : ChIP-Seq')
+        
+                bootstrap_cols = quote(.(region, design, bin))
+                unique_col = c("region", "design", "bin", "strand")
+            } else {
+                if(avoid_gaps) {
+                    if (!is.null(bam_name)){
+                        bam_name = results$bam[1]
+                    }
+                    results = private$data_frame_avoid_gaps(results, bam_name, gaps_threshold)
+                }                
+            
+                if (is.null(bin_count)) {
+                    message('produce data frame : RNA-Seq')
+                    
+                    bootstrap_cols = quote(.(region, design, nuctot))
+                    unique_col = c("region", "design", "nuctot")
+                    
+                    if(all(rowSums(design[,-1, drop=FALSE]) == 1) &
+                        all(colSums(design[,-1, drop=FALSE]) == 1)){
+                        results$qinf <- results$value
+                        results$qsup <- results$value
+                        skip_bootstrap = TRUE
+                    }
+                } else {
+                    message('produce data frame : RNA-Seq binned')
+        
+                    bootstrap_cols = quote(.(design, bin))
+                    unique_col = c("design", "bin")
+                }
+            }
+            
+            if(!skip_bootstrap) {
+                results <- results[,c(out_cols) := bootstrap(.SD), 
+                                    by = eval(bootstrap_cols)]
+            }
+            results <- unique(results, by=unique_col)
+            
+            results <- as.data.frame(results)
+            results$group <- as.factor(paste(results$design, results$region, sep="_"))
+            
+            return(results)
+        },
+        get_raw_coverages_internal = function(filenames = NULL) {
+            if (is.null(filenames)) {
+                private$coverages
+            } else {
+                stopifnot(is.character(filenames))
+                stopifnot(length(filenames) > 0)
+                bam_names <- private$get_bam_names(filenames)
+                stopifnot(length(bam_names) == length(filenames))
+                lapply(private$coverages, function(x) { x[bam_names] })
+            }
+        },
+        get_normalized_coverages_internal = function(filenames = NULL) {
+            # Define a function which will normalize coverage for a single
+            # BAM file.
+            normalize_coverage <- function(filename) {
+                count <- private$bam_handler$get_aligned_count(filename)
+                weight <- 1 / (count / 1000000)
+                for(strand in c("+", "-", "*")) {
+                    if(!is.null(coverages[[strand]])) {
+                        coverages[[strand]][[filename]] <- coverages[[strand]][[filename]] * weight
+                    }
+                }
+            }
+            
+            # Get the raw coverages.
+            coverages <- private$get_raw_coverages_internal(filenames)
+            
+            # Calculate normalized coverages in parallel.
+            coverage_names <- private$get_coverage_names(coverages)
+            coverages <- private$parallel_job$launch_job(data = coverage_names,
+                                                         FUN = normalize_coverage)
+            for(strand in c("+", "-", "*")) {                                                
+                names(coverages[[strand]]) <- coverage_names
+            }
+            coverages
+        }        
     )
 )
