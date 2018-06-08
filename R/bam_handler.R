@@ -397,7 +397,7 @@ Bam_Handler <- R6Class("Bam_Handler",
             if(!strand_specific) {
                 alignment = list('+'=NULL, '-'=NULL,
                                  '*'=private$read_alignments(regions, bam_file, paired_end=paired_end,
-                                                             paired_end_strand_mode=paired_end_strand_mode)
+                                                             paired_end_strand_mode=paired_end_strand_mode))
             } else {
                 # Read regions on each strand separately.
                 alignment = list('+'=private$read_alignments(regions, bam_file, '+',
@@ -413,10 +413,18 @@ Bam_Handler <- R6Class("Bam_Handler",
                 
             if (!is.null(count)) {
                 weight <- 1 / (count / 1000000)
-                return(lapply(alignment, function(x) { GenomicAlignments::coverage(x) * weight}))
             } else {
-                return(lapply(alignment, GenomicAlignments::coverage))
+                weight <- 1
             }
+            
+            weighted_coverage <- function(x) {
+                if(is.null(x)) {
+                    return(x)
+                } else { 
+                    return(GenomicAlignments::coverage(x) * weight)
+                }
+            }
+            return(lapply(alignment, weighted_coverage))
         },
         generic_get_coverage = function(bam_file, regions, force_seqlevels = FALSE, count=NULL) {
             private$check_bam_file(bam_file)

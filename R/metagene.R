@@ -450,23 +450,24 @@ metagene <- R6Class("metagene",
 
                 # Loop over all strands, building a table for each.
                 table_list = list()
-                for(strand_name in c('+', '-', '*'))
-                    if(is.null(coverages[[strand_name]])) {
+                for(strand_name in c('+', '-', '*')) {
+                    coverages_s = coverages[[strand_name]]
+                    if(is.null(coverages_s)) {
                         table_list[[strand_name]] = NULL
                     } else {
                         if (private$params[['assay']] == 'rnaseq') {
-                            table_list[[strand_name]] = private$produce_rna_table(coverages, design, self$get_regions(), bin_count)
+                            table_list[[strand_name]] = private$produce_rna_table(coverages_s, design, self$get_regions(), bin_count)
                         } else { # chipseq
                             if (!is.null(noise_removal)) {
-                                coverages[[strand_name]] <- private$remove_controls(coverages[[strand_name]], design)
+                                coverages_s <- private$remove_controls(coverages_s, design)
                             } else {
-                                coverages[[strand_name]] <- private$merge_chip(coverages[[strand_name]], design)
+                                coverages_s <- private$merge_chip(coverages_s, design)
                             }
                         
                             if (is.null(bin_count)) {
                                 bin_count = 100
                             }
-                            table_list[[strand_name]] <- private$produce_chip_table(coverages, design, self$get_regions(), bin_count)
+                            table_list[[strand_name]] <- private$produce_chip_table(coverages_s, design, self$get_regions(), bin_count)
                         }
                     }
                 }
@@ -535,7 +536,7 @@ metagene <- R6Class("metagene",
                 # 2. Produce the data.frame 
                 private$df <- data.table::copy(self$get_table())
             
-                if(private$params[['assay']]=='rnaseq' && !is.null(private$params[['bin_count']]) {
+                if(private$params[['assay']]=='rnaseq' && !is.null(private$params[['bin_count']])) {
                     sample_size_columns = quote(.(region, design))
                 } else {
                     sample_size_columns = quote(.(design))
@@ -565,7 +566,7 @@ metagene <- R6Class("metagene",
                     message('produce data frame : ChIP-Seq')
 
                     bootstrap_cols = quote(.(region, design, bin))
-                    unique_col = c("region", "design", "bin")
+                    unique_col = c("region", "design", "bin", "strand")
                 } else {
                     if(avoid_gaps){
                         if (!is.null(bam_name)){
@@ -948,8 +949,33 @@ metagene <- R6Class("metagene",
                         FUN = private$bam_handler$get_coverage,
                         regions = regions,
                         force_seqlevels= private$params[["force_seqlevels"]])
+            
             names(res) <- names(private$params[["bam_files"]])
-            lapply(res, function(x) { lapply(x, GenomeInfoDb::sortSeqlevels)})
+            
+            # Turn res inside out so that strand is at the top level,
+            # and bam files on the second.
+            res = list('+'=purrr::map(res, '+'),
+                       '-'=purrr::map(res, '-'),
+                       '*'=purrr::map(res, '*'))
+            replace_nulls = function(x) { 
+                if(all(map_lgl(x, is.null))) {
+                    return(NULL)
+                } else {
+                    return(x)
+                }
+            }
+            res = lapply(res, replace_nulls)
+
+                       
+            sortseq_or_null <- function(x) {
+                if(is.null(x)) {
+                    return(x)
+                } else {
+                    return(lapply(x, GenomeInfoDb::sortSeqlevels))
+                }
+            }
+            
+            lapply(res, sortseq_or_null)
         },
         plot_graphic = function(df, title, x_label) {
             # Prepare x label
@@ -1079,6 +1105,8 @@ metagene <- R6Class("metagene",
                     private$table$bin[i] <- (self$get_params()$bin_count + 1) - 
                                                         private$table$bin[i]
                     private$table$bin <- as.integer(private$table$bin)
+                } else {
+                    private$table$bin = private$table$nuc
                 }
                 private$df <- NULL
             }
@@ -1503,9 +1531,9 @@ metagene <- R6Class("metagene",
             stopifnot(length(setdiff(names(coverages), c("+", "-", "*")))==0)
             if(!is.null(coverages[['+']])) {
                 return(names(coverages[['+']]))
-            } if(!is.null(coverages[['-']])) {
+            } else if(!is.null(coverages[['-']])) {
                 return(names(coverages[['-']]))
-            } if(!is.null(coverages[['*']])) {
+            } else if(!is.null(coverages[['*']])) {
                 return(names(coverages[['*']]))
             }
         }
