@@ -268,8 +268,7 @@ metagene <- R6Class("metagene",
             if (is.null(region_names)) {
                 private$regions
             } else {
-                new_names <- tools::file_path_sans_ext(
-                                            basename(region_names))
+                new_names <- tools::file_path_sans_ext(basename(region_names))
                 region_names <- new_names
                 stopifnot(all(region_names %in% names(private$regions)))
                 private$regions[region_names]
@@ -282,16 +281,11 @@ metagene <- R6Class("metagene",
             if (private$params[['assay']] == 'chipseq'){
                 return(copy(private$table))
             } else if (private$params[['assay']] == 'rnaseq'){
-                if('bin' %in% colnames(private$table)){
-                    returnedCol <- c("region","exon","bam","design","nuc","bin",
-                                    "nuctot","exonsize","regionstartnuc",
-                                    "regionsize","value","strand")
+                if(is.null(private$params[['bin_count']])) {
+                    return(copy(private$table[,-"bin"]))
                 } else {
-                    returnedCol <- c("region","exon","bam","design","nuc",
-                                    "nuctot","exonsize","regionstartnuc",
-                                    "regionsize","value","strand")
+                    return(copy(private$table))
                 }
-                return(copy(private$table[,returnedCol,with=FALSE]))
             }
         },
         get_matrices = function() {
@@ -494,11 +488,8 @@ metagene <- R6Class("metagene",
             stopifnot(gaps_threshold >= 0)
             
             #add checks
-            list_of_arguments <- paste(alpha,
-                                    sample_count,
-                                    avoid_gaps,
-                                    bam_name,
-                                    gaps_threshold)
+            list_of_arguments <- paste(alpha, sample_count, avoid_gaps,
+                                       bam_name, gaps_threshold)
                                     
             if (private$params[["df_arguments"]] != list_of_arguments){
                 private$params[["df_arguments"]] <- list_of_arguments
@@ -1353,8 +1344,8 @@ metagene <- R6Class("metagene",
                               nuc = col_nuc,
                               nuctot = 1:length(col_nuc),
                               exonsize = col_exon_size,
-                              regionsize = col_gene_size,
                               regionstartnuc = col_gene_start_nuc,
+                              regionsize = col_gene_size,
                               value = col_values,
                               strand = col_strand))
         },
