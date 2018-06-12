@@ -855,7 +855,7 @@ metagene <- R6Class("metagene",
                        '-'=purrr::map(res, '-'),
                        '*'=purrr::map(res, '*'))
             replace_nulls = function(x) { 
-                if(all(map_lgl(x, is.null))) {
+                if(all(purrr::map_lgl(x, is.null))) {
                     return(NULL)
                 } else {
                     return(x)
