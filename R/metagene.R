@@ -733,7 +733,7 @@ metagene <- R6Class("metagene",
             ret_val = FALSE
             for(i in 1:length(arg_list)) {
                 # NA value means "keep what we had", so obviously that did not change.
-                if(!is.na(arg_list[[i]])) {
+                if(length(arg_list[[i]]) > 1 || !is.na(arg_list[[i]])) {
                     ret_val = ret_val || !identical(private$params[[param_names[i] ]], arg_list[[i]])
                 }
             }
