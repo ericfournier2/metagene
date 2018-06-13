@@ -497,14 +497,13 @@ metagene <- R6Class("metagene",
             }
             
             if (is.null(private$df)) {
-            
                 # 1. Get the correctly formatted table
                 if (is.null(self$get_table())) {
                     self$produce_table()
                 }
             
                 # 2. Produce the data.frame 
-                private$df <- produce_data_frame_internal(input_table=self$get_table(),
+                private$df <- private$produce_data_frame_internal(input_table=self$get_table(),
                     alpha=alpha, sample_count=sample_count, avoid_gaps=avoid_gaps, 
                     gaps_threshold=gaps_threshold, bam_name=bam_name,
                     assay=private$params[['assay']], input_design=self$get_design,  
@@ -1396,6 +1395,13 @@ metagene <- R6Class("metagene",
             col_regions <- names(regions) %>%
                 map(~ rep(.x, length(coverages) * bin_count * 
                             region_length[.x])) %>% unlist()
+
+            #col_regions_range <- as.list(regions) %>%
+            #                         map(names) %>%
+            #                         map(rep, each=bin_count) %>%
+            #                         map(rep, times=length(coverages)) %>%
+            #                         unlist()
+                                     
             col_designs <- map(region_length, ~ rep(names(coverages), 
                                 each = bin_count * .x)) %>% unlist
             col_bins <- rep(1:bin_count,
@@ -1422,6 +1428,7 @@ metagene <- R6Class("metagene",
             col_strand <- unlist(col_strand)
             
             return(data.table(region = col_regions,
+            #                  region_range = col_regions_range,
                               design = col_designs,
                               bin = col_bins,
                               value = col_values,
