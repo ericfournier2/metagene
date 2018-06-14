@@ -212,46 +212,64 @@ metagene <- R6Class("metagene",
                                 force_seqlevels = FALSE, paired_end = FALSE,
                                 assay = 'chipseq', strand_specific=FALSE,
                                 paired_end_strand_mode=2) {
-            # Check params...
-            private$check_param(regions = regions, bam_files = bam_files,
-                                padding_size = padding_size,
-                                cores = cores, verbose = verbose,
-                                force_seqlevels = force_seqlevels, 
-                                assay = assay)
-
-            # Save params
+            # Initialize parameter handler.
+            private$ph <- parameter_manager$new(
+                param_values=list(
+                    design=private$get_complete_design(bam_files),
+                    bam_files=private$name_from_path(bam_files),
+                    padding_size=padding_size,
+                    verbose=verbose,
+                    force_seqlevels=force_seqlevels,
+                    paired_end=paired_end,
+                    assay=tolower(assay),
+                    strand_specific=strand_specific,
+                    paired_end_strand_mode=paired_end_strand_mode,
+                    normalization=NULL,
+                    noise_removal=NULL,
+                    avoid_gaps=FALSE,
+                    gaps_threshold=0,
+                    bin_count=100,
+                    flip_regions=FALSE,
+                    alpha=0.05,
+                    sample_count=1000,
+                    bam_name=NULL),
+                param_validations=list(
+                    design=private$validate_design,
+                    bam_files=private$validate_bam_files,
+                    padding_size=private$validate_padding_size,
+                    verbose=private$validate_verbose,
+                    force_seqlevels=private$validate_force_seqlevels,
+                    paired_end=private$validate_paired_end,
+                    assay=private$validate_assay,
+                    strand_specific=private$validate_strand_specific,
+                    paired_end_strand_mode=private$validate_paired_end_strand_mode,
+                    normalization=private$validate_normalization,
+                    noise_removal=private$validate_noise_removal,
+                    avoid_gaps=private$validate_avoid_gaps,
+                    gaps_threshold=private$validate_gaps_threshold,
+                    bin_count=private$validate_bin_count,
+                    flip_regions=private$validate_flip_regions,
+                    alpha=private$validate_alpha,
+                    sample_count=private$validate_sample_count),
+                overall_validation=private$validate_combination)
+                
+            # Prepare objects for parralel processing.
+            private$validate_cores(cores)
             private$parallel_job <- Parallel_Job$new(cores)
-            private$params[["padding_size"]] <- padding_size
-            private$params[["verbose"]] <- verbose
-            if (is.null(names(bam_files))) {
-                new_names <- tools::file_path_sans_ext(basename(bam_files))
-                names(bam_files) <- new_names
-            }
-            private$params[["bin_count"]] <- NULL
-            private$params[["bam_files"]] <- bam_files
-            private$params[["force_seqlevels"]] <- force_seqlevels
-            private$params[["flip_regions"]] <- FALSE
-            private$params[["assay"]] <- tolower(assay)
-            private$params[["strand_specific"]] <- strand_specific
-            private$params[["df_arguments"]] <- ""
-            
-            private$params[["alpha"]] <- 0.05
-            private$params[["sample_count"]] <- 1000
             
             # Prepare bam files
             private$print_verbose("Prepare bam files...")
-            private$bam_handler <- Bam_Handler$new(bam_files, cores = cores,
+            private$bam_handler <- Bam_Handler$new(private$ph$get("bam_files") , cores = cores,
                                         paired_end = paired_end,
                                         strand_specific=strand_specific,
                                         paired_end_strand_mode=paired_end_strand_mode)
 
             # Prepare regions
             private$print_verbose("Prepare regions...")
-            private$regions <- private$prepare_regions(regions)
+            private$regions <- private$prepare_regions(regions, private$ph$get("assay"))
 
             # Parse bam files
-            private$print_verbose("Parse bam files...\n")
-            private$print_verbose("coverages...\n")
+            private$print_verbose("Calculating coverages...\n")
             private$coverages <- private$produce_coverages()    
         },
         get_bam_count = function(filename) {
@@ -259,10 +277,10 @@ metagene <- R6Class("metagene",
             private$bam_handler$get_aligned_count(filename)
         },
         get_params = function() {
-            private$params
+            private$ph$get_all()
         },
         get_design = function() {
-            private$params$design
+            private$ph$get("design")
         },
         get_regions = function(region_names = NULL) {
             if (is.null(region_names)) {
@@ -278,10 +296,11 @@ metagene <- R6Class("metagene",
             if (length(private$table) == 0) { 
                 return(NULL)
             }
-            if (private$params[['assay']] == 'chipseq'){
+            assay = private$ph$get("assay")
+            if (assay == 'chipseq'){
                 return(copy(private$table))
-            } else if (private$params[['assay']] == 'rnaseq'){
-                if(is.null(private$params[['bin_count']])) {
+            } else if (assay == 'rnaseq'){
+                if(is.null(private$ph$get('bin_count'))) {
                     return(copy(private$table[,-"bin"]))
                 } else {
                     return(copy(private$table))
@@ -292,9 +311,10 @@ metagene <- R6Class("metagene",
             if (is.null(self$get_table())){
                 return(NULL)
             }
-            if (private$params[['assay']] == 'chipseq') {
+            assay = private$ph$get("assay")
+            if (assay == 'chipseq') {
                 matrices <- list()
-                nbcol <- private$params[["bin_count"]]
+                nbcol <- private$ph$get("bin_count")
                 nbrow <- vapply(self$get_regions(), length, numeric(1))
                 for (regions in names(self$get_regions())) {
                     matrices[[regions]] <- list()
@@ -309,32 +329,30 @@ metagene <- R6Class("metagene",
                 return (matrices)
             } else {
                 stop(paste('unsupported function for assay of type',
-                        private$params[['assay']],
+                        assay,
                         '. Only available for "chipseq" assay.')) 
             }
         },
         get_data_frame = function(region_names = NULL, design_names = NULL) {
             if (nrow(private$df) == 0) {
                 NULL
-            } else if (is.null(region_names) & is.null(design_names)) {
+            } else if (is.null(region_names) && is.null(design_names)) {
                 return(copy(private$df))
             } else {
                 if (!is.null(region_names)) {
                     stopifnot(is.character(region_names))
-                    stopifnot(all(region_names %in% 
-                                    unique(private$table$region)))
+                    stopifnot(all(region_names %in% unique(private$table$region)))
                 } else {
                     region_names <- names(private$regions)
                 }
                 if (!is.null(design_names)) {
                     stopifnot(is.character(design_names))
-                    stopifnot(all(design_names %in% 
-                                    unique(private$table$design)))
+                    stopifnot(all(design_names %in% unique(private$table$design)))
                 } else {
-                    design_names <- colnames(private$params$design)[-1]
+                    design_names <- colnames(private$ph$get("design"))[-1]
                 }
                 i <- (private$df$region %in% region_names &
-                                    private$df$design %in% design_names)
+                      private$df$design %in% design_names)
                 return(copy(private$df[i,]))
             }
         },
@@ -346,14 +364,14 @@ metagene <- R6Class("metagene",
             }
         },
         get_raw_coverages = function(filenames = NULL) {
-            if(!private$params[['strand_specific']]) {
+            if(!private$ph$get('strand_specific')) {
                 return(private$get_raw_coverages_internal(filenames)[['*']])
             } else {
                 return(private$get_raw_coverages_internal(filenames))
             }        
         },
         get_normalized_coverages = function(filenames = NULL) {
-            if(!private$params[['strand_specific']]) {
+            if(!private$ph$get('strand_specific')) {
                 return(private$get_normalized_coverages_internal(filenames)[['*']])
             } else {
                 return(private$get_normalized_coverages_internal(filenames))
@@ -387,8 +405,10 @@ metagene <- R6Class("metagene",
         #    return(private$design_coverages)
         #},
         add_design = function(design, check_bam_files = FALSE) {
-            private$params$design = private$fetch_design(design, check_bam_files)
-            private$table <- NULL
+            if(private$ph$update_params(design)) {
+                private$table <- NULL
+                private$df <- NULL
+            }
         },
         produce_table = function(design = NA, bin_count = NA, bin_size = NULL,
                                 noise_removal = NA, normalization = NA,
@@ -397,24 +417,13 @@ metagene <- R6Class("metagene",
                 warning("bin_size is now deprecated. Please use bin_count.")
             }
 
-            if (private$table_need_update(design = design,
-                                          bin_count = bin_count,
-                                          noise_removal = noise_removal,
-                                          normalization = normalization)) {            
+            if(private$ph$update_params(design, bin_count, noise_removal, normalization)) {
+                private$table = NULL
+            }
             
-                design <- private$fetch_design(design)
-
-                bin_count <- private$get_param_value(bin_count, "bin_count")
-                noise_removal <- private$get_param_value(noise_removal, "noise_removal")
-                normalization <- private$get_param_value(normalization, "normalization")
-                                                        
-                private$check_produce_table_params(bin_count = bin_count,
-                                                   design = design,
-                                                   noise_removal = noise_removal,
-                                                   normalization = normalization,
-                                                   flip_regions = flip_regions)
-
-                if (!is.null(normalization)) {
+            if (is.null(private$table)) {            
+                # Normalize if necessary.
+                if (!is.null(private$ph$get("normalization"))) {
                     coverages <- private$get_normalized_coverages_internal()
                     message('Normalization done')
                 } else {
@@ -424,40 +433,20 @@ metagene <- R6Class("metagene",
                 # Loop over all strands, building a table for each.
                 table_list = list()
                 for(strand_name in c('+', '-', '*')) {
-                    coverages_s = coverages[[strand_name]]
-                    if(is.null(coverages_s)) {
-                        table_list[[strand_name]] = NULL
-                    } else {
-                        if (private$params[['assay']] == 'rnaseq') {
-                            table_list[[strand_name]] = private$produce_rna_table(coverages_s, design, self$get_regions(), bin_count)
-                        } else { # chipseq
-                            if (!is.null(noise_removal)) {
-                                coverages_s <- private$remove_controls(coverages_s, design)
-                            } else {
-                                coverages_s <- private$merge_chip(coverages_s, design)
-                            }
-                        
-                            if (is.null(bin_count)) {
-                                bin_count = 100
-                            }
-                            table_list[[strand_name]] <- private$produce_chip_table(coverages_s, design, self$get_regions(), bin_count)
-                        }
-                    }
+                    table_list[[strand_name]] = private$produce_strand_table(coverages[[strand_name]],
+                                                                             private$ph$get("assay"), 
+                                                                             private$ph$get("design"), 
+                                                                             self$get_regions(), 
+                                                                             private$ph$get("noise_removal"), 
+                                                                             private$ph$get("bin_count"))
                 }
 
                 # Merge coverage tables.
                 private$table = do.call(rbind, table_list)
-                
-                private$params[["bin_count"]] <- bin_count
-                private$params[["noise_removal"]] <- noise_removal
-                private$params[["normalization"]] <- normalization
                 private$df <- NULL
-                private$params[["design"]] <- design
-            } else {
-                message(paste('WARNING : table is unchanged regarding',
-                    'design, bin_count, noise_removal, normalization.'))
             }
-            if (flip_regions == TRUE) {
+
+            if (flip_regions) {
                 self$flip_regions()
             } else {
                 self$unflip_regions()
@@ -469,30 +458,19 @@ metagene <- R6Class("metagene",
                                                     bam_name = NULL, 
                                                     gaps_threshold = 0) {
             #arguments checking
-            stopifnot(is.numeric(alpha))
-            stopifnot(is.numeric(sample_count))
-            stopifnot(alpha >= 0 & alpha <= 1)
-            stopifnot(sample_count > 0)
-            sample_count <- as.integer(sample_count)
-            stopifnot(is.logical(avoid_gaps))
             if (!is.null(bam_name)){
                 stopifnot(is.character(bam_name))
                 bam_name <- tools::file_path_sans_ext(basename(bam_name))
                 bam_names <- tools::file_path_sans_ext(basename(
-                                                private$params[["bam_files"]]))
+                                                private$ph$get("bam_files")))
                 if (!bam_name %in% bam_names){
                     stop(paste("bam_name argument is not one of bam_names",
                                         "provided to the metagene object"))
                 }
             }
-            stopifnot(gaps_threshold >= 0)
-            
-            #add checks
-            list_of_arguments <- paste(alpha, sample_count, avoid_gaps,
-                                       bam_name, gaps_threshold)
-                                    
-            if (private$params[["df_arguments"]] != list_of_arguments){
-                private$params[["df_arguments"]] <- list_of_arguments
+
+            # If parameters hae been updated, set the table to NULL.
+            if (private$ph$update_params(alpha, sample_count, avoid_gaps, bam_name, gaps_threshold)) {
                 private$df <- NULL
             }
             
@@ -506,8 +484,8 @@ metagene <- R6Class("metagene",
                 private$df <- private$produce_data_frame_internal(input_table=self$get_table(),
                     alpha=alpha, sample_count=sample_count, avoid_gaps=avoid_gaps, 
                     gaps_threshold=gaps_threshold, bam_name=bam_name,
-                    assay=private$params[['assay']], input_design=self$get_design,  
-                    bin_count=private$params[['bin_count']])
+                    assay=private$ph$get('assay'), input_design=self$get_design,  
+                    bin_count=private$ph$get('bin_count'))
                     
                 invisible(self)
             }
@@ -549,16 +527,16 @@ metagene <- R6Class("metagene",
             invisible(coverage)
         },
         flip_regions = function() {
-            if (private$params[["flip_regions"]] == FALSE) {
+            if (!private$ph$get("flip_regions")) {
                 private$flip_table()
-                private$params[["flip_regions"]] <- TRUE
+                private$ph$set("flip_regions", TRUE)
             }
             invisible(self)
         },
         unflip_regions = function() {
-            if (private$params[["flip_regions"]] == TRUE) {
+            if (private$ph$get("flip_regions")) {
                 private$flip_table()
-                private$params[["flip_regions"]] <- FALSE
+                private$ph$set("flip_regions", FALSE)
             }
             invisible(self)
         }
@@ -574,197 +552,14 @@ metagene <- R6Class("metagene",
         graph = "",
         bam_handler = "",
         parallel_job = "",
-        check_param = function(regions, bam_files, padding_size,
-                                cores, verbose, force_seqlevels, assay) {
-            # Check parameters validity
-            if (!is.character(assay)) {
-                stop("verbose must be a character value")
-            }
-            assayTypeAuthorized <- c('chipseq', 'rnaseq')
-            if (!(tolower(assay) %in% assayTypeAuthorized)) {
-                stop("assay values must be one of 'chipseq' or 'rnaseq'")
-            }
-            if (!is.logical(verbose)) {
-                stop("verbose must be a logicial value (TRUE or FALSE)")
-            }
-            if (!is.logical(force_seqlevels)) {
-                stop(paste("force_seqlevels must be a logicial ",
-                            "value (TRUE or FALSE)",sep=""))
-            }
-            if (!(is.numeric(padding_size) || is.integer(padding_size)) ||
-                padding_size < 0 || as.integer(padding_size) != padding_size) {
-                stop("padding_size must be a non-negative integer")
-            }
-            isBiocParallel = is(cores, "BiocParallelParam")
-            isInteger = ((is.numeric(cores) || is.integer(cores)) &&
-                            cores > 0 &&as.integer(cores) == cores)
-            if (!isBiocParallel && !isInteger) {
-                stop(paste0("cores must be a positive numeric or ",
-                            "BiocParallelParam instance"))
-            }
-            if (!is.vector(bam_files, "character")) {
-                stop("bam_files must be a vector of BAM filenames")
-            }
-            if (!all(sapply(bam_files, file.exists))) {
-                stop("At least one BAM file does not exist")
-            }
-            if (!is(regions, "GRangesList") && !is.character(regions)
-                && !is(regions, "GRanges") && !is.list(regions)) {
-                stop(paste0("regions must be either a vector of BED ",
-                    "filenames, a GRanges object or a GrangesList object"))
-            }
-            if(assay=="rnaseq" && is(regions, "GRanges")) {
-                if(length(unique(seqnames(regions))) > 1) {
-                    stop(paste0("for rnaseq assays, regions should be a ",
-                                "GRangesList of transcripts, or a GRanges ",
-                                " object representing a single transcript. ",
-                                "Here regions spans several seqnames, indicating ",
-                                "it might include many transcripts."))
-                }
-            }
-            
-            # Validation specific to regions as a vector
-            if (is.character(regions) && !all(sapply(regions, file.exists))) {
-                stop("regions must be a list of existing BED files")
-            }
-        },
-        check_design = function(design, check_bam_files = FALSE) {
-            stopifnot(is.logical(check_bam_files))
-            if(!is.null(design) && !is.data.frame(design) &&
-                !identical(design, NA)) {
-                stop("design must be a data.frame object, NULL or NA")
-            }
-            if (is.data.frame(design)) {
-                if(ncol(design) < 2) {
-                    stop("design must have at least 2 columns")
-                }
-                if (!(is.character(design[,1]) || is.factor(design[,1]))) {
-                    stop("The first column of design must be BAM filenames")
-                }
-                if (!all(apply(design[, -1, drop=FALSE], MARGIN=2,
-                            is.numeric))) {
-                    stop(paste0("All design column, except the first one,",
-                                    " must be in numeric format"))
-                }
-                if (check_bam_files == TRUE) {
-                    samples <- as.character(design[,1])
-                    if (!all(private$check_bam_files(samples))) {
-                        stop("Design contains bam files absent from metagene.")
-                    }
-                }
-            }
-        },
-        check_produce_table_params = function(bin_count, design,
-                                                noise_removal, normalization,
-                                                flip_regions) {
-            # At least one file must be used in the design
-            if (!identical(design, NA)) {
-                if (!is.null(design)) {
-                    if (sum(rowSums(design[ , -1, drop=FALSE]) > 0) == 0) {
-                        stop(paste("At least one BAM file must be ",
-                                "used in the design",sep=""))
-                    }
-                }
-            }
-            # Test only BAM file used in the design
-            if (!identical(design, NA)) {
-                if(!is.null(design) &&
-                    !all(apply(design[rowSums(design[, -1, drop=FALSE]) > 0, 1,
-                                    drop=FALSE], MARGIN = 2,
-                            FUN=private$check_bam_files))) {
-                    stop("At least one BAM file does not exist")
-                }
-            }
-            # bin_count should be a numeric value without digits
-            if (!identical(bin_count, NA)) {
-                if (!is.null(bin_count)) {
-                    if (!is.numeric(bin_count) || bin_count < 0 ||
-                        as.integer(bin_count) != bin_count) {
-                        stop("bin_count must be NULL or a positive integer")
-                    }
-                }
-            }
-            if (!identical(noise_removal, NA)) {
-                if (!is.null(noise_removal)) {
-                    if (!noise_removal %in% c("NCIS")) {
-                        msg <- 'noise_removal must be NA, NULL, or "NCIS".'
-                        stop(msg)
-                    }
-                }
-            }
-            if (!identical(normalization, NA)) {
-                if (!is.null(normalization)) {
-                    if (!normalization == "RPM") {
-                        msg <- "normalization must be NA, NULL or \"RPM\"."
-                        stop(msg)
-                    }
-                }
-            }
-            if (!is.logical(flip_regions)) {
-                msg <- "flip_regions must be a logical."
-                stop(msg)
-            }
-        },
-        # Determines if passed-in params match the ones in private$params.
-        # Parameters can be passed-in by name (noise_removal='NCIS'). If
-        # no name is provided, it is inferred from the passed in expression.
-        # So have_params_changed(noise_removal) will check private$params
-        # for a parameter named "noise_removal".
-        have_params_changed = function(...) {
-            # Get passed-in expressions in case the arguments were unnamed.
-            param_names_alt = sapply( substitute(list(...)), deparse)[-1]
-            
-            # Put arguments inside a list, and make sure there's at least one.
-            arg_list = list(...)
-            if(length(arg_list)==0) {
-                # No arguments means nothing has changed!
-                return(FALSE)
-            }
-            
-            # Infer names
-            param_names = names(arg_list)
-            if(is.null(param_names)) {
-                param_names = param_names_alt
-            } else {
-                param_names = ifelse(param_names=="", param_names_alt, param_names)
-            }
+        ph=NULL,
         
-            ret_val = FALSE
-            for(i in 1:length(arg_list)) {
-                # NA value means "keep what we had", so obviously that did not change.
-                if(length(arg_list[[i]]) > 1 || !is.na(arg_list[[i]])) {
-                    ret_val = ret_val || !identical(private$params[[param_names[i] ]], arg_list[[i]])
-                }
-            }
-        
-            return(ret_val)
-        },
-        table_need_update = function(design, bin_count, 
-                                     noise_removal, normalization) {
-            return((length(private$table)==0) ||
-                   private$have_params_changed(design, bin_count,
-                                       noise_removal, normalization))
-        },
-        data_frame_need_update = function(alpha = NA, sample_count = NA) {
-            return((length(private$df) == 0) || private$have_params_changed(alpha, sample_count))
-        },
-        design_coverage_need_update = function(design, normalization, noise_removal) {
-            return((length(private$design_coverages)==0) ||
-                   private$have_params_changed(design, normalization, noise_removal))
-        },
-        get_param_value = function(param_value, param_name) {
-            param_name <- as.character(param_name)
-            if (identical(param_value, NA)) {
-                if (! param_name %in% names(private$params)) {
-                    param_value <- NULL
-                } else {
-                    param_value <- private$params[[param_name]]
-                }
-            }
-            return(param_value)
-        },
+        #design_coverage_need_update = function(design, normalization, noise_removal) {
+        #    return((length(private$design_coverages)==0) ||
+        #           private$have_params_changed(design, normalization, noise_removal))
+        #},
         print_verbose = function(to_print) {
-            if (private$params[["verbose"]]) {
+            if (private$ph$get("verbose")) {
                 cat(paste0(to_print, "\n"))
             }
         },
@@ -782,45 +577,40 @@ metagene <- R6Class("metagene",
             views <- Views(cov[[chr]], start(gr), end(gr))
             viewMeans(views)
         },
-        prepare_regions = function(regions) {
+        prepare_regions = function(regions, assay) {
             if (class(regions) == "character") {
-                names <- sapply(regions, function(x)
-                    file_path_sans_ext(basename(x)))
-                import_file <- function(region) {
-                    ext <- tolower(tools::file_ext(region))
-                    if (ext == "narrowpeak") {
-                        extraCols <- c(signalValue = "numeric",
-                                        pValue = "numeric", qValue = "numeric",
-                                        peak = "integer")
-                        rtracklayer::import(region, format = "BED",
-                                            extraCols = extraCols)
-                    } else if (ext == "broadpeak") {
-                        extraCols <- c(signalValue = "numeric",
-                                        pValue = "numeric", qValue = "numeric")
-                        rtracklayer::import(region, format = "BED",
-                                            extraCols = extraCols)
-                    } else if (ext == "gtf" | ext == "gff") {
-                        split(rtracklayer::import(region), 
-                                rtracklayer::import(region)$gene_id)
-                    } else {
-                        rtracklayer::import(region)
-                    }
+                # Validation specific to regions as a vector
+                if (!all(sapply(regions, file.exists))) {
+                    stop("regions is a list of files, but some of those files do not exist.")
                 }
-                regions <- private$parallel_job$launch_job(data = regions,
-                                                        FUN = import_file)
-                names(regions) <- names
+                regions = private$import_regions_from_disk(regions)
             } else if (class(regions) == "GRanges") {
                 regions <- GRangesList("regions" = regions)
             } else if (class(regions) == "list") {
                 regions <- GRangesList(regions)
+            } else if (!is(regions, "GRangesList")) {
+                stop(paste0("regions must be either a vector of BED ",
+                            "filenames, a GRanges object or a GrangesList object"))            
             }
+            
             if (is.null(names(regions))) {
                 names(regions) <- sapply(seq_along(regions), function(x) {
                     paste("region", x, sep = "_")
                     })        
             }
             
-            if (private$params[['assay']] == "rnaseq"){
+            if(assay=="rnaseq" && is(regions, "GRanges")) {
+                if(length(unique(seqnames(regions))) > 1) {
+                    stop(paste0("For rnaseq assays, regions should be a ",
+                                "GRangesList of transcripts, or a GRanges ",
+                                " object representing a single transcript. ",
+                                "Here regions spans several seqnames, indicating ",
+                                "it might include many transcripts."))
+                }
+            }
+
+            
+            if (private$ph$get('assay') == "rnaseq"){
                 stopifnot(all(sum(width(GenomicRanges::reduce(private$regions)))
                             == sum(width(private$regions))))
             }
@@ -829,9 +619,10 @@ metagene <- R6Class("metagene",
 
             GRangesList(lapply(regions, function(x) {
                 # Add padding
-                start(x) <- start(x) - private$params$padding_size
+                padding_size = private$ph$get("padding_size")
+                start(x) <- start(x) - padding_size
                 start(x)[start(x) < 0] <- 1
-                end(x) <- end(x) + private$params$padding_size
+                end(x) <- end(x) + padding_size
                 # Clean seqlevels
                 x <- sortSeqlevels(x)
                 #seqlevels(x) <- unique(as.character(seqnames(x)))
@@ -840,13 +631,14 @@ metagene <- R6Class("metagene",
         },
         produce_coverages = function() {
             regions <- GenomicRanges::reduce(BiocGenerics::unlist(private$regions))
+            bam_files = private$ph$get("bam_files")
             res <- private$parallel_job$launch_job(
-                        data = private$params[["bam_files"]],
+                        data = bam_files,
                         FUN = private$bam_handler$get_coverage,
                         regions = regions,
-                        force_seqlevels= private$params[["force_seqlevels"]])
+                        force_seqlevels= private$ph$get("force_seqlevels"))
             
-            names(res) <- names(private$params[["bam_files"]])
+            names(res) <- names(bam_files)
             
             # Turn res inside out so that strand is at the top level,
             # and bam files on the second.
@@ -875,22 +667,20 @@ metagene <- R6Class("metagene",
         },
         plot_graphic = function(df, title, x_label) {
             # Prepare x label
-            
+            assay = private$ph$get("assay")
             if (is.null(x_label)) {
-                if (private$params[['assay']] == "chipseq") {
+                if (assay == "chipseq") {
                     x_label <- "Distance in bins"
-                } else if (private$params[['assay']] == "rnaseq" &
-                            !('bin' %in% colnames(private$table))) {
-                    x_label <- "Distance in nucleotides"
-                } else if (private$params[['assay']] == "rnaseq" &
-                            ('bin' %in% colnames(private$table))) {
-                    x_label <- "Distance in bins"
+                } else if (assay == "rnaseq") {
+                    x_label = ifelse(is.null(private$ph$get("bin_count")),
+                                     "Distance in nucleotides",
+                                     "Distance in bins")
                 }
             }
 
             # Prepare y label
             y_label <- "Mean coverage"
-            if (is.null(private$params[["normalization"]])) {
+            if (is.null(private$ph$get("normalization"))) {
                 y_label <- paste(y_label, "(raw)")
             } else {
                 y_label <- paste(y_label, "(RPM)")
@@ -902,32 +692,6 @@ metagene <- R6Class("metagene",
                 xlab(x_label) +
                 ggtitle(title)
             p
-        },
-        fetch_design = function(design, check_bam_files = FALSE) {
-            private$check_design(design = design, check_bam_files)
-            get_complete_design <- function() {
-                bam_files <- names(private$params[["bam_files"]])
-                design <- data.frame(bam_files = bam_files)
-                for (bam_file in names(private$coverages)) {
-                    colname <- file_path_sans_ext(basename(bam_file))
-                    design[[colname]] <- rep(0, length(bam_files))
-                    i <- bam_files == bam_file
-                    design[[colname]][i] <- 1
-                }
-                design
-            }
-            if (is.null(design)) {
-                return(get_complete_design())
-            }
-            if (identical(design, NA)) {
-                if (all(dim(private$params$design) == c(0, 0))) {
-                    return(get_complete_design())
-                } else {
-                    return(private$params$design)
-                }
-            }
-            design[,1] <- as.character(design[,1])
-            return(design)
         },
         remove_controls = function(coverages, design) {
             results <- list()
@@ -971,20 +735,21 @@ metagene <- R6Class("metagene",
                  BamNames=bam_names)
         },
         flip_table = function() {
+            assay = private$ph$get('assay')
             if(!all(private$table[,length(levels(as.factor(strand))), 
                                     by=region][,2] == 1) &
-                                    private$params[["assay"]] == 'rnaseq'){
+                                    assay == 'rnaseq'){
                 stop(paste('Strands of exons in one gene/region',
                                 'must have the same sign to be flipped.'))
             }
-            if (private$params[['assay']] == 'chipseq'){
+            if (assay == 'chipseq'){
                 message('ChIP-Seq flip/unflip')
                 i <- which(private$table$strand == '-')
                 private$table$bin[i] <- (self$get_params()$bin_count + 1) - 
                                                         private$table$bin[i]
                 private$table$bin <- as.integer(private$table$bin)
                 private$df <- NULL
-            } else if (private$params[['assay']] == 'rnaseq'){
+            } else if (assay == 'rnaseq'){
                 message('RNA-Seq flip/unflip')
                 i <- which(private$table$strand == '-')
                 #col_nuc
@@ -997,7 +762,7 @@ metagene <- R6Class("metagene",
                                         private$table$regionstartnuc[i] * 2 - 2
                 private$table$nuctot <- as.integer(private$table$nuctot)
                 #col_bin
-                if(!is.null(private$params[["bin_count"]])){
+                if(!is.null(private$ph$get("bin_count"))){
                     private$table$bin[i] <- (self$get_params()$bin_count + 1) - 
                                                         private$table$bin[i]
                     private$table$bin <- as.integer(private$table$bin)
@@ -1008,7 +773,7 @@ metagene <- R6Class("metagene",
             }
         },
         get_bam_names = function(filenames) {
-            if (all(filenames %in% colnames(private$params$design)[-1])) {
+            if (all(filenames %in% colnames(private$ph$get("design"))[-1])) {
                 filenames
             } else {
                 stopifnot(private$check_bam_files(filenames))
@@ -1024,7 +789,7 @@ metagene <- R6Class("metagene",
             },
             logical(1)))
         },
-        data_frame_avoid_gaps = function(input_df, bam_name, gaps_threshold) {
+        data_frame_avoid_gaps = function(input_df, bam_name, gaps_threshold, flip_regions, bin_count) {
             #bootstrap not executed at this point. Don't work on design !
             
             #how_namy_by_exon_by_design
@@ -1090,7 +855,7 @@ metagene <- R6Class("metagene",
                             times = length(unique(work_df$bam)))
             
             #reorder the nuc and nuctot variables
-            if(private$params[["flip_regions"]] == TRUE){
+            if(flip_regions){
                 flip_by_bam_n_region <- map2(rep(unique(work_df$bam), 
                             each=length(unique(work_df$region))), 
                     rep(unique(work_df$region),
@@ -1126,7 +891,7 @@ metagene <- R6Class("metagene",
                                             min(work_df$nuctot[.x]):
                                                 max(work_df$nuctot[.x])))
                 }
-            } else { # if private$params[["flip_regions"]] == FALSE
+            } else { #flip_regions == FALSE
                 by_bam_n_region <- map2(rep(unique(work_df$bam), 
                             each=length(unique(work_df$region))), 
                     rep(unique(work_df$region), 
@@ -1143,7 +908,7 @@ metagene <- R6Class("metagene",
                                                 max(work_df$nuctot[.x])))
                 }
             }
-            if(!is.null(private$params[["bin_count"]])){
+            if(!is.null(bin_count)){
                 #reinitialization of region/gene_size to be able to rebuild 
                 #bin column
                 length_by_region_n_bam <- work_df[,length(nuc),
@@ -1152,7 +917,7 @@ metagene <- R6Class("metagene",
                                             times=length_by_region_n_bam)
                 #rebuild the correct bin column
                 col_bins <- trunc((work_df$nuc/(work_df$regionsize+1))
-                                        *private$params[["bin_count"]])+1
+                                        *bin_count)+1
                 work_df$bin <- as.integer(col_bins)
             }
             
@@ -1485,7 +1250,9 @@ metagene <- R6Class("metagene",
                     if (!is.null(bam_name)){
                         bam_name = results$bam[1]
                     }
-                    results = private$data_frame_avoid_gaps(results, bam_name, gaps_threshold)
+                    results = private$data_frame_avoid_gaps(results, bam_name, gaps_threshold,
+                                                            private$ph$get("flip_regions"), 
+                                                            private$ph$get("bin_count"))
                 }                
             
                 if (is.null(bin_count)) {
@@ -1554,6 +1321,189 @@ metagene <- R6Class("metagene",
                 names(coverages[[strand]]) <- coverage_names
             }
             coverages
-        }        
+        },
+        produce_strand_table = function(coverages_s, assay, design, regions, noise_removal, bin_count) {
+            if(is.null(coverages_s)) {
+                return(NULL)
+            } else {
+                if (assay == 'rnaseq') {
+                    return(private$produce_rna_table(coverages_s, design, regions, bin_count))
+                } else { # chipseq
+                    if (!is.null(noise_removal)) {
+                        coverages_s <- private$remove_controls(coverages_s, design)
+                    } else {
+                        coverages_s <- private$merge_chip(coverages_s, design)
+                    }
+
+                    return(private$produce_chip_table(coverages_s, design, regions, bin_count))
+                }
+            }        
+        },        
+        validate_design = function(design) {
+            if(!is.data.frame(design)) {
+                stop("design must be a data.frame object.")
+            }
+
+            # Validate that we have enough columns and that they are of the right types.
+            if(ncol(design) < 2) {
+                stop("design must have at least 2 columns")
+            }
+            if (!(is.character(design[,1]) || is.factor(design[,1]))) {
+                stop("The first column of design must be BAM filenames")
+            }
+            if (!all(apply(design[, -1, drop=FALSE], MARGIN=2, is.numeric))) {
+                stop(paste0("All design column, except the first one,",
+                                " must be in numeric format"))
+            }
+
+            # At least one file must be used in the design
+            if (sum(rowSums(design[ , -1, drop=FALSE]) > 0) == 0) {
+                stop("At least one BAM file must be used in the design.")
+            }
+
+            # Check if used bam files exist.
+            non_empty_rows = rowSums(design[, -1, drop=FALSE]) > 0
+            if (!all(map_lgl(design$Samples[non_empty_rows], private$check_bam_files))) {
+                stop("At least one BAM file does not exist")
+            }
+        },
+        validate_alpha = function(alpha) {
+            stopifnot(is.numeric(alpha))
+            stopifnot(alpha >= 0 & alpha <= 1)
+        },
+        validate_bin_count = function(bin_count) {
+            if (!is.null(bin_count)) {
+                if (!is.numeric(bin_count) || bin_count <= 0 || as.integer(bin_count) != bin_count) {
+                    stop("bin_count must be NULL or a positive integer")
+                }
+            }
+        },
+        validate_sample_count = function(sample_count) {
+            stopifnot(is.numeric(sample_count))
+            stopifnot(sample_count > 0)
+            stopifnot(as.integer(sample_count) == sample_count)
+        },
+        validate_avoid_gaps = function(avoid_gaps) {
+            stopifnot(is.logical(avoid_gaps))
+        },
+        validate_gaps_threshold = function(gaps_threshold) {
+            stopifnot(is.numeric(gaps_threshold))
+            stopifnot(gaps_threshold >= 0)
+        },
+        validate_noise_removal = function(noise_removal) {
+            if (!is.null(noise_removal) && !(noise_removal %in% c("NCIS"))) {
+                stop('noise_removal must be NA, NULL, or "NCIS".')
+            }
+        },
+        validate_normalisation = function(normalisation) {
+            if (!is.null(normalization) && normalization != "RPM") {
+                stop("normalization must be NA, NULL or \"RPM\".")
+            }
+        },
+        validate_flip_regions = function(flip_regions) {
+            if (!is.logical(flip_regions)) {
+                stop("flip_regions must be a logical.")
+            }
+        },
+        validate_assay = function(assay) {
+            # Check parameters validity
+            if (!is.character(assay)) {
+                stop("verbose must be a character value")
+            }
+            assayTypeAuthorized <- c('chipseq', 'rnaseq')
+            if (!(tolower(assay) %in% assayTypeAuthorized)) {
+                stop("assay values must be one of 'chipseq' or 'rnaseq'")
+            }
+        },
+        validate_verbose = function(verbose) {
+            if (!is.logical(verbose)) {
+                stop("verbose must be a logicial value (TRUE or FALSE)")
+            }       
+        },
+        validate_force_seqlevels = function(force_seq_levels) {
+            if (!is.logical(force_seqlevels)) {
+                stop(paste("force_seqlevels must be a logicial ",
+                            "value (TRUE or FALSE)",sep=""))
+            }        
+        },
+        validate_padding_size = function(x) {
+            if (!(is.numeric(padding_size) || is.integer(padding_size)) ||
+                padding_size < 0 || as.integer(padding_size) != padding_size) {
+                stop("padding_size must be a non-negative integer")
+            }       
+        },
+        validate_cores = function(cores) {
+            isBiocParallel = is(cores, "BiocParallelParam")
+            isInteger = ((is.numeric(cores) || is.integer(cores)) &&
+                            cores > 0 && as.integer(cores) == cores)
+            if (!isBiocParallel && !isInteger) {
+                stop("cores must be a positive integer or a BiocParallelParam instance.")
+            }        
+        },
+        validate_bam_files = function(bam_files) {
+            if (!is.vector(bam_files, "character")) {
+                stop("bam_files must be a vector of BAM filenames.")
+            }
+            if (!all(sapply(bam_files, file.exists))) {
+                stop("At least one BAM file does not exist.")
+            }        
+        },
+        validate_combination = function(params) {
+            if(params$assay=="chipseq" && is.null(params$bin_count)) {
+                stop("bin_count cannot be NULL in chipseq assays.")
+            }
+            
+            if (check_bam_files == TRUE) {
+                if(!all(params$design[,1] %in% names(params$bam_files))) {
+                    stop("Design contains bam files absent from bam_files.")
+                }
+            }
+        },
+        get_complete_design = function(bam_files) {
+            bam_files = private$name_from_path(bam_files)
+            
+            # Concatenate the bam names and the identity matrix, then
+            # rename all columns but the first.
+            design <- cbind(data.frame(bam_files = bam_files), diag(length(bam_files)))
+            colnames(design)[-1] = names(bam_files)
+            
+            design
+        },
+        name_from_path = function(file_paths) {
+            alt_names = tools::file_path_sans_ext(basename(file_paths))
+            if(is.null(names(file_paths))) {
+                names(file_paths) = alt_names
+            } else {
+                ifelse(names(file_paths)=="", alt_names, names(file_paths))
+            }
+            return(file_paths)
+        },
+        import_regions_from_disk = function(file_names) {
+            file_names = private$name_from_path(file_names)
+            import_file <- function(region) {
+                ext <- tolower(tools::file_ext(region))
+                if (ext == "narrowpeak") {
+                    extraCols <- c(signalValue = "numeric",
+                                    pValue = "numeric", qValue = "numeric",
+                                    peak = "integer")
+                    rtracklayer::import(region, format = "BED",
+                                        extraCols = extraCols)
+                } else if (ext == "broadpeak") {
+                    extraCols <- c(signalValue = "numeric",
+                                    pValue = "numeric", qValue = "numeric")
+                    rtracklayer::import(region, format = "BED",
+                                        extraCols = extraCols)
+                } else if (ext == "gtf" | ext == "gff") {
+                    split(rtracklayer::import(region), 
+                            rtracklayer::import(region)$gene_id)
+                } else {
+                    rtracklayer::import(region)
+                }
+            }
+            regions <- private$parallel_job$launch_job(data = file_names,
+                                                    FUN = import_file)
+            names(regions) <- names(file_names)
+            return(regions)
+        }
     )
 )
