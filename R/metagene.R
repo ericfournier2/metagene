@@ -1363,7 +1363,7 @@ metagene <- R6Class("metagene",
 
             # Check if used bam files exist.
             non_empty_rows = rowSums(design[, -1, drop=FALSE]) > 0
-            if (!all(map_lgl(design$Samples[non_empty_rows], private$check_bam_files))) {
+            if (!all(purrr::map_lgl(design$Samples[non_empty_rows], private$check_bam_files))) {
                 stop("At least one BAM file does not exist")
             }
         },
