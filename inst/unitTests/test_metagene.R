@@ -274,7 +274,7 @@ test.metagene_initialize_valid_unnamed_bam_files <- function() {
 
 ## Valid default
 #test.metagene_plot_default <- function() {
-#    mg <- demo_mg$clone()
+#    mg <- demo_mg$clone(deep=TRUE)
 #    mg$produce_data_frame(sample_count = 10)
 #    pdf(NULL)
 #    mg$plot()
@@ -329,7 +329,7 @@ test.metagene_initialize_valid_unnamed_bam_files <- function() {
 
 ## Valid usage
 test.metagene_get_params_valid_usage <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     params <- mg$get_params()
     checkIdentical(unname(params[["bam_files"]]), get_demo_bam_files())
     checkIdentical(params[["padding_size"]], 0)
@@ -344,7 +344,7 @@ test.metagene_get_params_valid_usage <- function() {
 
 ## Valid usage
 test.metagene_get_design_valid_usage <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(get_demo_design())
     design <- mg$get_design()
     checkIdentical(design, get_demo_design())
@@ -356,7 +356,7 @@ test.metagene_get_design_valid_usage <- function() {
 
 ## Valid usage default
 test.metagene_get_regions_valid_usage_default <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     regions <- mg$get_regions()
     exp <- get_demo_regions()
     exp <- tools::file_path_sans_ext(basename(exp))
@@ -365,7 +365,7 @@ test.metagene_get_regions_valid_usage_default <- function() {
 
 ## Valid usage subset
 test.metagene_get_regions_valid_usage_subset <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     regions <- mg$get_regions(get_demo_regions()[1])
     exp <- get_demo_regions()[1]
     exp <- tools::file_path_sans_ext(basename(exp))
@@ -374,7 +374,7 @@ test.metagene_get_regions_valid_usage_subset <- function() {
 
 ## Invalid usage region_names class
 test.metagene_get_regions_invalid_usage_region_names_class <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_regions(1), error = conditionMessage)
     exp <- "a character vector argument expected"
     checkIdentical(obs, exp)
@@ -382,7 +382,7 @@ test.metagene_get_regions_invalid_usage_region_names_class <- function() {
 
 ## Invalid usage region_names empty
 test.metagene_get_regions_invalid_usage_region_names_empty <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_regions(""), error = conditionMessage)
     exp <- "all(region_names %in% names(private$regions)) is not TRUE"
     checkIdentical(obs, exp)
@@ -390,7 +390,7 @@ test.metagene_get_regions_invalid_usage_region_names_empty <- function() {
 
 ## Invalid usage region_names absent
 test.metagene_get_regions_invalid_usage_region_names_absent <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_regions("not_valid_name"), error = conditionMessage)
     exp <- "all(region_names %in% names(private$regions)) is not TRUE"
     checkIdentical(obs, exp)
@@ -403,7 +403,7 @@ test.metagene_get_regions_invalid_usage_region_names_absent <- function() {
 
 ## Valid usage default
 test.metagene_get_table_valid_usage_default <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg$produce_table()
  tab <- mg$get_table()
  checkTrue(is.data.frame(tab))
@@ -414,14 +414,14 @@ test.metagene_get_table_valid_usage_default <- function() {
 
 ## Valid usage without producing table before
 test.metagene_get_table_without_producing_table_before <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  tab <- mg$get_table()
  checkIdentical(tab, NULL)
 }
 
 ## Valid usage get_table return by copy of table
 test.metagene_get_table_check_copy_of_table <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg$produce_table()
  tab <- mg$get_table()
  #modification of table by reference
@@ -436,7 +436,7 @@ test.metagene_get_table_check_copy_of_table <- function() {
 ##################################################
 
 test.metagene_get_matrices_valid_usage_default = function(){
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$produce_table()
     m <- mg$get_matrices()
     checkIdentical(dim(m$list1$align1_rep1$input) == c(50,100), c(TRUE,TRUE))
@@ -452,7 +452,7 @@ test.metagene_get_matrices_valid_usage_default = function(){
 }
 
 test.metagene_get_matrices_without_producing_table_before <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  m <- mg$get_matrices()
  checkIdentical(m, NULL)
 }
@@ -463,7 +463,7 @@ test.metagene_get_matrices_without_producing_table_before <- function() {
 
 ## Valid usage default
 test.metagene_get_data_frame_valid_usage_default <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg$produce_table()$produce_data_frame(sample_count = 10)
  df <- mg$get_data_frame()
  regions <- get_demo_regions()
@@ -477,7 +477,7 @@ test.metagene_get_data_frame_valid_usage_default <- function() {
 test.metagene_get_data_frame_valid_usage_subset <- function() {
  regions <- tools::file_path_sans_ext(basename(get_demo_regions()[1]))
  bam_files <- tools::file_path_sans_ext(basename(get_demo_bam_files()[1:2]))
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg$produce_table()$produce_data_frame(sample_count = 10)
  df <- mg$get_data_frame(region_names = regions, design_names = bam_files)
  checkTrue(is.data.frame(df))
@@ -488,7 +488,7 @@ test.metagene_get_data_frame_valid_usage_subset <- function() {
 #
 ## Valid usage get_data_frame return by copy of data_frame
 test.metagene_get_data_frame_check_copy_of_data_frame <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg$produce_table()
  mg$produce_data_frame()
  df1 <- mg$get_data_frame()
@@ -502,7 +502,7 @@ test.metagene_get_data_frame_check_copy_of_data_frame <- function() {
 #
 ## Valid usage no data_frame produced
 test.metagene_get_data_frame_valid_usage_no_data_frame <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  df <- mg$get_data_frame()
  checkTrue(is.null(df))
  df_subset <- mg$get_data_frame(get_demo_regions()[1],
@@ -512,7 +512,7 @@ test.metagene_get_data_frame_valid_usage_no_data_frame <- function() {
 #
 ### Invalid usage region_names class
 test.metagene_get_data_frame_invalid_usage_region_names_class <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
  obs <- tryCatch(mg$get_data_frame(region_names = 1),
                 error = conditionMessage)
@@ -522,7 +522,7 @@ test.metagene_get_data_frame_invalid_usage_region_names_class <- function() {
 #
 ### Invalid usage region_names empty
 test.metagene_get_data_frame_invalid_usage_region_names_empty <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
  obs <- tryCatch(mg$get_data_frame(region_names = ""),
                 error = conditionMessage)
@@ -532,7 +532,7 @@ test.metagene_get_data_frame_invalid_usage_region_names_empty <- function() {
 #
 ### Invalid usage region_names absent
 test.metagene_get_data_frame_invalid_usage_region_names_absent <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
  obs <- tryCatch(mg$get_data_frame(region_names = "not_valid_name"),
                 error = conditionMessage)
@@ -542,7 +542,7 @@ test.metagene_get_data_frame_invalid_usage_region_names_absent <- function() {
 #
 ### Valid usage exp_name no design
 test.metagene_get_data_frame_valid_usage_design_names_no_design <- function() {
- mg <- demo_mg$clone()$produce_table()
+ mg <- demo_mg$clone(deep=TRUE)$produce_table()
  mg$produce_data_frame(sample_count = 10)
  exp_name <- tools::file_path_sans_ext(basename(get_demo_bam_files()[1]))
  nodesign <- unique(mg$get_data_frame(design_names = exp_name)$design)
@@ -551,7 +551,7 @@ test.metagene_get_data_frame_valid_usage_design_names_no_design <- function() {
 #
 ### Valid usage exp_name design
 test.metagene_get_data_frame_valid_usage_design_names_exist_design <- function() {
- mg <- demo_mg$clone()$produce_table(design = get_demo_design())
+ mg <- demo_mg$clone(deep=TRUE)$produce_table(design = get_demo_design())
  mg$produce_data_frame(sample_count = 10)
  exp_name <- unique(mg$get_table()$design)
  yesdesign <- unique(mg$get_data_frame(design_names = exp_name)$design)
@@ -561,7 +561,7 @@ test.metagene_get_data_frame_valid_usage_design_names_exist_design <- function()
 ### Invalid usage exp_name bam_file design
 test.metagene_get_data_frame_invalid_usage_design_names_bam_file_design <-
     function() {
- mg <- demo_mg$clone()$produce_table(design = get_demo_design())
+ mg <- demo_mg$clone(deep=TRUE)$produce_table(design = get_demo_design())
  mg$produce_data_frame(sample_count = 10)
  exp_name <- tools::file_path_sans_ext(basename(get_demo_bam_files()[1]))
  obs <- tryCatch(mg$get_data_frame(design_names = exp_name),
@@ -572,7 +572,7 @@ test.metagene_get_data_frame_invalid_usage_design_names_bam_file_design <-
 #
 ### Invalid usage design_names class
 test.metagene_get_data_frame_invalid_usage_design_names_class <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
  obs <- tryCatch(mg$get_data_frame(design_names = 1),
                 error = conditionMessage)
@@ -582,7 +582,7 @@ test.metagene_get_data_frame_invalid_usage_design_names_class <- function() {
 #
 ### Invalid usage design_names empty
 test.metagene_get_data_frame_invalid_usage_design_names_empty <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
  obs <- tryCatch(mg$get_data_frame(design_names = ""),
                 error = conditionMessage)
@@ -592,7 +592,7 @@ test.metagene_get_data_frame_invalid_usage_design_names_empty <- function() {
 #
 ### Invalid usage design_names absent
 test.metagene_get_data_frame_invalid_usage_design_names_absent <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
  obs <- tryCatch(mg$get_data_frame(design_names = "not_valid_name"),
                 error = conditionMessage)
@@ -606,7 +606,7 @@ test.metagene_get_data_frame_invalid_usage_design_names_absent <- function() {
 
 ## Valid case no graph
 test.metagene_get_plot_valid_case_no_graph <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     plot <- mg$get_plot()
     checkTrue(is.null(plot))
 }
@@ -614,7 +614,7 @@ test.metagene_get_plot_valid_case_no_graph <- function() {
 ## Valid case graph
 #test.metagene_get_plot_valid_case_graph <- function() {
 #    pdf(NULL)
-#    mg <- demo_mg$clone()
+#    mg <- demo_mg$clone(deep=TRUE)
 #    mg$produce_data_frame(sample_count = 10)$plot()
 #    plot <- mg$get_plot()
 #    dev.off()
@@ -630,43 +630,43 @@ exp_raw <- GenomicAlignments::coverage(exp_raw)
 
 ## Default filenames
 test.metagene_get_raw_coverages_default_filenames <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_raw_coverages()[[1]]
     checkTrue(all(vapply(1:length(obs),
-                        function(i) identical(obs[[i]], exp_raw[[i]]),
+                        function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
 }
 
 ## NULL filenames
 test.metagene_get_raw_coverages_null_filenames <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_raw_coverages(filenames = NULL)[[1]]
     checkTrue(all(vapply(1:length(obs),
-                        function(i) identical(obs[[i]], exp_raw[[i]]),
+                        function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
 }
 
 ## One filename
 test.metagene_get_raw_coverages_one_filename <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_raw_coverages(filenames = bam_files[1])[[1]]
     checkTrue(all(vapply(1:length(obs),
-                        function(i) identical(obs[[i]], exp_raw[[i]]),
+                        function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
 }
 
 ## All filenames
 test.metagene_get_raw_coverages_all_filename <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_raw_coverages(filenames = bam_files)[[1]]
     checkTrue(all(vapply(1:length(obs),
-                        function(i) identical(obs[[i]], exp_raw[[i]]),
+                        function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
 }
 
 ## Invalid filenames class
 test.metagene_get_raw_coverages_invalid_filenames_class <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_raw_coverages(filenames = 1),
                     error = conditionMessage)
     exp <- "is.character(filenames) is not TRUE"
@@ -675,7 +675,7 @@ test.metagene_get_raw_coverages_invalid_filenames_class <- function() {
 
 ## Invalid empty filename
 test.metagene_get_raw_coverages_invalid_empty_filename <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_raw_coverages(filenames = ""),
                     error = conditionMessage)
     exp <- "private$check_bam_files(filenames) is not TRUE"
@@ -684,7 +684,7 @@ test.metagene_get_raw_coverages_invalid_empty_filename <- function() {
 
 ## Invalid filename alone
 test.metagene_get_raw_coverages_invalid_filename_alone <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_raw_coverages(filenames = "asdf"),
                     error = conditionMessage)
     exp <- "private$check_bam_files(filenames) is not TRUE"
@@ -693,7 +693,7 @@ test.metagene_get_raw_coverages_invalid_filename_alone <- function() {
 
 ## Invalid filename among valid
 test.metagene_get_raw_coverages_invalid_filename_among_valid <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_raw_coverages(filenames = c("asdf", bam_files)),
                     error = conditionMessage)
     exp <- "private$check_bam_files(filenames) is not TRUE"
@@ -710,43 +710,43 @@ exp_norm <- exp_raw * weight
 
 ## Default filenames
 test.metagene_get_normalized_coverages_default_filenames <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_normalized_coverages()[[1]]
     checkTrue(all(vapply(1:length(obs),
-                        function(i) identical(obs[[i]], exp_norm[[i]]),
+                        function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
 }
 
 ## NULL filenames
 test.metagene_get_normalized_coverages_null_filenames <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_normalized_coverages(filenames = NULL)[[1]]
     checkTrue(all(vapply(1:length(obs),
-                        function(i) identical(obs[[i]], exp_norm[[i]]),
+                        function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
 }
 
 ## One filename
 test.metagene_get_normalized_coverages_one_filename <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_normalized_coverages(filenames = bam_files[1])[[1]]
     checkTrue(all(vapply(1:length(obs),
-                        function(i) identical(obs[[i]], exp_norm[[i]]),
+                        function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
 }
 
 ## All filenames
 test.metagene_get_normalized_coverages_all_filename <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_normalized_coverages(filenames = bam_files)[[1]]
     checkTrue(all(vapply(1:length(obs),
-                        function(i) identical(obs[[i]], exp_norm[[i]]),
+                        function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
 }
 
 ## Invalid filenames class
 test.metagene_get_normalized_coverages_invalid_filenames_class <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_normalized_coverages(filenames = 1),
                     error = conditionMessage)
     exp <- "is.character(filenames) is not TRUE"
@@ -755,7 +755,7 @@ test.metagene_get_normalized_coverages_invalid_filenames_class <- function() {
 
 ## Invalid empty filename
 test.metagene_get_normalized_coverages_invalid_empty_filename <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_normalized_coverages(filenames = ""),
                     error = conditionMessage)
     exp <- "private$check_bam_files(filenames) is not TRUE"
@@ -764,7 +764,7 @@ test.metagene_get_normalized_coverages_invalid_empty_filename <- function() {
 
 ## Invalid filename alone
 test.metagene_get_normalized_coverages_invalid_filename_alone <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$get_normalized_coverages(filenames = "asdf"),
                     error = conditionMessage)
     exp <- "private$check_bam_files(filenames) is not TRUE"
@@ -774,7 +774,7 @@ test.metagene_get_normalized_coverages_invalid_filename_alone <- function() {
 ## Invalid filename among valid
 test.metagene_get_normalized_coverages_invalid_filename_among_valid <- 
     function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     filenames <- c("asdf", bam_files)
     obs <- tryCatch(mg$get_normalized_coverages(filenames = filenames),
                     error = conditionMessage)
@@ -788,14 +788,14 @@ test.metagene_get_normalized_coverages_invalid_filename_among_valid <-
 
 ## Valid design data frame
 test.metagene_add_design_valid_design_data_frame <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(get_demo_design())
     checkIdentical(mg$get_design(), get_demo_design())
 }
 
 ## Valid design NULL
 test.metagene_add_design_valid_design_null <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = NULL)
     checkIdentical(colnames(mg$get_design())[-1],
                 names(mg$get_params()[["bam_files"]]))
@@ -804,7 +804,7 @@ test.metagene_add_design_valid_design_null <- function() {
 
 ## Valid design NA, NA first
 test.metagene_add_design_valid_design_na_na_first <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = NA)
     checkIdentical(colnames(mg$get_design())[-1],
                 names(mg$get_params()[["bam_files"]]))
@@ -813,7 +813,7 @@ test.metagene_add_design_valid_design_na_na_first <- function() {
 
 ## Valid design NA, NULL first
 test.metagene_add_design_valid_design_na_null_first <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = NULL)
     mg$add_design(design = NA)
     checkIdentical(colnames(mg$get_design())[-1],
@@ -823,14 +823,14 @@ test.metagene_add_design_valid_design_na_null_first <- function() {
 
 ## Valid design NA, design first
 test.metagene_add_design_valid_design_na_design_first <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = get_demo_design())
     checkIdentical(mg$get_design(), get_demo_design())
 }
 
 ## Valid design, factor sample names
 test.metagene_add_design_valid_design_factor_sample_names <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     design <- get_demo_design()
     design[,1] <- factor(design[,1])
     mg$add_design(design)
@@ -842,7 +842,7 @@ test.metagene_add_design_valid_design_factor_sample_names <- function() {
 
 ## Valid check_bam_files TRUE NA design
 test.metagene_add_design_valid_check_bam_files_true_na_design <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = NA, check_bam_files = TRUE)
     checkIdentical(colnames(mg$get_design())[-1],
                 names(mg$get_params()[["bam_files"]]))
@@ -851,7 +851,7 @@ test.metagene_add_design_valid_check_bam_files_true_na_design <- function() {
 
 ## Valid check_bam_files TRUE NULL design
 test.metagene_add_design_valid_check_bam_files_true_null_design <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = NA, check_bam_files = TRUE)
     checkIdentical(colnames(mg$get_design())[-1],
                 names(mg$get_params()[["bam_files"]]))
@@ -861,14 +861,14 @@ test.metagene_add_design_valid_check_bam_files_true_null_design <- function() {
 ## Valid check_bam_files TRUE design design
 test.metagene_add_design_valid_check_bam_files_true_design_design <- function()
 {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = get_demo_design(), check_bam_files = TRUE)
     checkIdentical(mg$get_design(), get_demo_design())
 }
 
 ## Invalid design class
 test.metagene_add_design_invalid_design_class <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$add_design(design = 1), error = conditionMessage)
     exp <- "design must be a data.frame object, NULL or NA"
     checkIdentical(obs, exp)
@@ -876,7 +876,7 @@ test.metagene_add_design_invalid_design_class <- function() {
 
 ## Invalid design column
 test.metagene_add_design_invalid_design_column <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     design <- get_demo_design()
     design <- design[, 1, drop = FALSE]
     obs <- tryCatch(mg$add_design(design = design), error = conditionMessage)
@@ -886,7 +886,7 @@ test.metagene_add_design_invalid_design_column <- function() {
 
 ## Invalid design column one class
 test.metagene_add_design_invalid_design_column_one_class <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     design <- get_demo_design()
     design[,1] <- seq_along(design[,1])
     obs <- tryCatch(mg$add_design(design = design), error = conditionMessage)
@@ -896,7 +896,7 @@ test.metagene_add_design_invalid_design_column_one_class <- function() {
 
 ## Invalid design column two plus class
 test.metagene_add_design_invalid_design_columns_two_plus_class <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     design <- get_demo_design()
     design[,2] <- letters[seq_along(design[,2])]
     obs <- tryCatch(mg$add_design(design = design), error = conditionMessage)
@@ -906,7 +906,7 @@ test.metagene_add_design_invalid_design_columns_two_plus_class <- function() {
 
 ## Invalid check_bam_files class
 test.metagene_add_design_invalid_check_bam_files_class <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     obs <- tryCatch(mg$add_design(check_bam_files = 1),
                     error = conditionMessage)
     exp <- "is.logical(check_bam_files) is not TRUE"
@@ -915,7 +915,7 @@ test.metagene_add_design_invalid_check_bam_files_class <- function() {
 
 ## Invalid bam file check_bam_files TRUE
 test.metagene_add_design_invalid_bam_file_check_bam_files_true <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     design <- get_demo_design()
     design[1,1] <- "not_a_valid_bam_file"
     obs <- tryCatch(mg$add_design(design = design, check_bam_files = TRUE),
@@ -926,7 +926,7 @@ test.metagene_add_design_invalid_bam_file_check_bam_files_true <- function() {
 
 ## Invalid bam file check_bam_files FALSE
 test.metagene_add_design_invalid_bam_file_check_bam_files_false <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     design <- get_demo_design()
     design[1,1] <- "not_a_valid_bam_file"
     obs <- mg$add_design(design = design, check_bam_files = FALSE)
@@ -938,7 +938,7 @@ test.metagene_add_design_invalid_bam_file_check_bam_files_false <- function() {
 ##################################################
 
 test.metagene_produce_table_valid_without_design <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     checkIdentical("bin_count" %in% mg$get_params(), FALSE)
     mg$produce_table()
     checkIdentical(mg$get_params()[["bin_count"]], 100)
@@ -974,7 +974,7 @@ test.metagene_produce_table_valid_without_design <- function() {
 }
 
 test.metagene_produce_table_valid_with_design <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     checkIdentical("bin_count" %in% mg$get_params(), FALSE)
     demo_design <- get_demo_design()
     mg$produce_table(design = demo_design)
@@ -1012,7 +1012,7 @@ test.metagene_produce_table_valid_with_design <- function() {
 }
 
 test.metagene_produce_table_valid_without_design_bin_count_50 <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     checkIdentical("bin_count" %in% mg$get_params(), FALSE)
     mg$produce_table(bin_count = 50)
     checkIdentical(mg$get_params()[["bin_count"]], 50)
@@ -1048,7 +1048,7 @@ test.metagene_produce_table_valid_without_design_bin_count_50 <- function() {
 }
 
 test.metagene_produce_table_valid_with_design_bin_count_50 <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     checkIdentical("bin_count" %in% mg$get_params(), FALSE)
     demo_design <- get_demo_design()
     mg$produce_table(design = demo_design, bin_count = 50)
@@ -1086,7 +1086,7 @@ test.metagene_produce_table_valid_with_design_bin_count_50 <- function() {
 #
 # Not valid design object
 test.metagene_produce_table_invalid_design <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(design = c(1,2)),
                 error = conditionMessage)
  exp <- "design must be a data.frame object, NULL or NA"
@@ -1095,7 +1095,7 @@ test.metagene_produce_table_invalid_design <- function() {
 #
 # Design data.frame with not enough columns
 test.metagene_produce_table_invalid_design_data_frame <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  design <- data.frame(a = c("ZOMBIE_ONE", "ZOMBIE_TWO"))
  obs <- tryCatch(mg$produce_table(design = design),
                 error = conditionMessage)
@@ -1105,7 +1105,7 @@ test.metagene_produce_table_invalid_design_data_frame <- function() {
 
 # Design data.frame with invalid first column
 test.metagene_produce_table_invalid_design_first_column <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  design <- data.frame(a = c(1,3), zombies = c("ZOMBIE_ONE", "ZOMBIE_TWO"))
  obs <- tryCatch(mg$produce_table(design = design),
                 error = conditionMessage)
@@ -1115,7 +1115,7 @@ test.metagene_produce_table_invalid_design_first_column <- function() {
 
 # Design data.frame with invalid second column
 test.metagene_produce_table_invalid_design_second_column <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  designTemp<-data.frame(a = named_bam_files,
                         zombies = rep("ZOMBIE_ONE", length(named_bam_files)))
  obs <- tryCatch(mg$produce_table(design = designTemp),
@@ -1127,7 +1127,7 @@ test.metagene_produce_table_invalid_design_second_column <- function() {
 
 # Design data.frame with invalid second column
 test.metagene_produce_table_invalid_design_not_defined_file <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  designNew<-data.frame(a = c(bam_files, "I am not a file"),
                         b = rep(1, length(bam_files) + 1))
  obs <- tryCatch(mg$produce_table(design = designNew),
@@ -1138,18 +1138,18 @@ test.metagene_produce_table_invalid_design_not_defined_file <- function() {
 
 # Design using zero file (0 in all rows of the design object)
 test.metagene_produce_table_design_using_no_file <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  designNew<-data.frame(a = bam_files,
                         b = rep(0, length(bam_files)))
  obs <- tryCatch(mg$produce_table(design = designNew),
                 error = conditionMessage)
- exp <- "At least one BAM file must be used in the design"
+ exp <- "At least one BAM file must be used in the design."
  checkIdentical(obs, exp)
 }
 
 # Invalid bin_count class
 test.metagene_produce_table_invalid_bin_count_class <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(bin_count = "a"),
                 error = conditionMessage)
  exp <- "bin_count must be NULL or a positive integer"
@@ -1158,7 +1158,7 @@ test.metagene_produce_table_invalid_bin_count_class <- function() {
 
 # Invalid bin_count negative value
 test.metagene_produce_table_invalid_bin_count_negative_value <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(bin_count = -1),
                 error = conditionMessage)
  exp <- "bin_count must be NULL or a positive integer"
@@ -1167,7 +1167,7 @@ test.metagene_produce_table_invalid_bin_count_negative_value <- function() {
 
 # Invalid bin_count decimals
 test.metagene_produce_table_invalid_bin_count_decimals <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(bin_count = 1.2),
                 error = conditionMessage)
  exp <- "bin_count must be NULL or a positive integer"
@@ -1176,25 +1176,25 @@ test.metagene_produce_table_invalid_bin_count_decimals <- function() {
 
 # Invalid noise_rate class
 test.metagene_produce_table_invalid_noise_removal_class <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(noise_removal = 1234),
                 error = conditionMessage)
- exp <- "noise_removal must be NA, NULL, \"NCIS\" or \"RPM\"."
+ exp <- "noise_removal must be NA, NULL, \"NCIS\"."
  checkIdentical(obs, exp)
 }
 
 # Invalid noise_rate value
 test.metagene_produce_table_invalid_noise_removal_value <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(noise_removal = "CSI"),
                 error = conditionMessage)
- exp <- "noise_removal must be NA, NULL, \"NCIS\" or \"RPM\"."
+ exp <- "noise_removal must be NA, NULL, \"NCIS\"."
  checkIdentical(obs, exp)
 }
 
 # Valid noise_removal NCIS
 test.metagene_produce_table_valid_noise_removal_ncis <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     design <- get_demo_design()[,1:2]
     design[,2][2] <- 0
     mg$produce_table(noise_removal = "NCIS", design = design)
@@ -1233,7 +1233,7 @@ test.metagene_produce_table_valid_noise_removal_ncis <- function() {
 
 # Invalid normalization class
 test.metagene_produce_table_invalid_normalization_class <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(normalization = 1234),
                 error = conditionMessage)
  exp <- "normalization must be NA, NULL or \"RPM\"."
@@ -1242,7 +1242,7 @@ test.metagene_produce_table_invalid_normalization_class <- function() {
 
 # Invalid normalization value
 test.metagene_produce_table_invalid_normalization_value <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(normalization = "CSI"),
                 error = conditionMessage)
  exp <- "normalization must be NA, NULL or \"RPM\"."
@@ -1251,7 +1251,7 @@ test.metagene_produce_table_invalid_normalization_value <- function() {
 #
 ## Valid normalization RPM
 test.metagene_produce_table_valid_normalization_rpm <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$produce_table(normalization = "RPM")
     checkIdentical(mg$get_params()[["bin_count"]], 100)
     checkIdentical(mg$get_params()[["normalization"]], "RPM")
@@ -1288,7 +1288,7 @@ test.metagene_produce_table_valid_normalization_rpm <- function() {
 #
 ## Invalid flip_regions class
 test.metagene_produce_table_invalid_flip_regions_class <- function() {
- mg <- demo_mg$clone()
+ mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(flip_regions = 1234),
                 error = conditionMessage)
  exp <- "flip_regions must be a logical."
@@ -1297,7 +1297,7 @@ test.metagene_produce_table_invalid_flip_regions_class <- function() {
 #
 ## Valid flip_regions true
 test.metagene_produce_table_valid_flip_regions_true <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
     mg$produce_table(flip_regions = TRUE)
     checkIdentical(mg$get_params()[["bin_count"]], 100)
@@ -1324,7 +1324,7 @@ test.metagene_produce_table_valid_flip_regions_true <- function() {
 #
 ## Valid flip_regions false
 test.metagene_produce_table_valid_flip_regions_false <- function() {
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
     mg$produce_table(flip_regions = FALSE)
     checkIdentical(mg$get_params()[["bin_count"]], 100)
@@ -1355,7 +1355,7 @@ test.metagene_produce_table_valid_flip_regions_false <- function() {
 
 ## Valid default usage
 test.metagene_produce_data_frame_default_arguments <- function(){
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$produce_table()
     mg$produce_data_frame()
     df <- mg$get_data_frame()
@@ -1398,7 +1398,7 @@ test.metagene_produce_data_frame_default_arguments <- function(){
 
 ### Invalid alpha class
 test.metagene_produce_data_frame_invalid_alpha_class <- function(){
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$produce_table()
     obs <- tryCatch(mg$produce_data_frame(alpha='test'),
                 error = conditionMessage)
@@ -1407,7 +1407,7 @@ test.metagene_produce_data_frame_invalid_alpha_class <- function(){
 }
 ### Invalid alpha value
 test.metagene_produce_data_frame_invalid_alpha_value <- function(){
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$produce_table()
     obs <- tryCatch(mg$produce_data_frame(alpha=-0.8),
                 error = conditionMessage)
@@ -1416,7 +1416,7 @@ test.metagene_produce_data_frame_invalid_alpha_value <- function(){
 }
 ### Invalid sample_count class
 test.metagene_produce_data_frame_invalid_sample_count_class <- function(){
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$produce_table()
     obs <- tryCatch(mg$produce_data_frame(sample_count='test'),
                 error = conditionMessage)
@@ -1425,7 +1425,7 @@ test.metagene_produce_data_frame_invalid_sample_count_class <- function(){
 }
 ### Invalid sample_count value
 test.metagene_produce_data_frame_invalid_sample_count_value <- function(){
-    mg <- demo_mg$clone()
+    mg <- demo_mg$clone(deep=TRUE)
     mg$produce_table()
     obs <- tryCatch(mg$produce_data_frame(sample_count=0),
                 error = conditionMessage)

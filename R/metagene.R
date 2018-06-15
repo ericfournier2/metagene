@@ -417,6 +417,8 @@ metagene <- R6Class("metagene",
                 warning("bin_size is now deprecated. Please use bin_count.")
             }
 
+            private$validate_flip_regions(flip_regions)
+            
             if(private$ph$update_params(design, bin_count, noise_removal, normalization)) {
                 private$table = NULL
             }
@@ -544,7 +546,7 @@ metagene <- R6Class("metagene",
     private = list(
         params = list(),
         regions = GRangesList(),
-        table = data.table(),
+        table = NULL,
         design = data.frame(),
         coverages = list(),
         design_coverages = list(),
@@ -636,8 +638,9 @@ metagene <- R6Class("metagene",
                         data = bam_files,
                         FUN = private$bam_handler$get_coverage,
                         regions = regions,
-                        force_seqlevels= private$ph$get("force_seqlevels"))
-            
+                        force_seqlevels= private$ph$get("force_seqlevels"),
+                        simplify=FALSE)
+
             names(res) <- names(bam_files)
             
             # Turn res inside out so that strand is at the top level,
@@ -1315,10 +1318,12 @@ metagene <- R6Class("metagene",
             
             # Calculate normalized coverages in parallel.
             coverage_names <- private$get_coverage_names(coverages)
-            coverages <- private$parallel_job$launch_job(data = coverage_names,
-                                                         FUN = normalize_coverage)
+            private$parallel_job$launch_job(data = coverage_names,
+                                            FUN = normalize_coverage)
             for(strand in c("+", "-", "*")) {                                                
-                names(coverages[[strand]]) <- coverage_names
+                if(!is.null(coverages[[strand]])) {
+                    names(coverages[[strand]]) <- coverage_names
+                }
             }
             coverages
         },
@@ -1395,7 +1400,7 @@ metagene <- R6Class("metagene",
                 stop('noise_removal must be NA, NULL, or "NCIS".')
             }
         },
-        validate_normalisation = function(normalisation) {
+        validate_normalization = function(normalization) {
             if (!is.null(normalization) && normalization != "RPM") {
                 stop("normalization must be NA, NULL or \"RPM\".")
             }
@@ -1504,6 +1509,17 @@ metagene <- R6Class("metagene",
                                                     FUN = import_file)
             names(regions) <- names(file_names)
             return(regions)
+        },
+        deep_clone = function(name, value) {
+            # With x$clone(deep=TRUE) is called, the deep_clone gets invoked once for
+            # each field, with the name and value.
+            if (name == "ph") {
+                 # `a` is an environment, so use this quick way of copying
+                 value$clone()
+            } else {
+                # For all other fields, just return the value
+                value
+            }
         }
     )
 )

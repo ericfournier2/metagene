@@ -196,14 +196,15 @@ Bam_Handler <- R6Class("Bam_Handler",
         get_bam_files = function() {
             private$bam_files
         },
-        get_coverage = function(bam_file, regions, force_seqlevels = FALSE) {
-            private$generic_get_coverage(bam_file, regions, force_seqlevels)
+        get_coverage = function(bam_file, regions, force_seqlevels = FALSE, simplify=TRUE) {
+            coverages = private$generic_get_coverage(bam_file, regions, force_seqlevels, 
+                                                     simplify=simplify)
         },
         get_normalized_coverage = function(bam_file, regions,
-                            force_seqlevels = FALSE) {
+                            force_seqlevels = FALSE, simplify=TRUE) {
             count <- self$get_aligned_count(bam_file)
-            private$generic_get_coverage(bam_file, regions, force_seqlevels, count)
-                            private$check_bam_file(bam_file)
+            private$generic_get_coverage(bam_file, regions, force_seqlevels, count, simplify=simplify)
+            private$check_bam_file(bam_file)
         },
         get_noise_ratio = function(chip_bam_names, input_bam_names) {
             lapply(c(chip_bam_names, input_bam_names), private$check_bam_file)
@@ -426,14 +427,20 @@ Bam_Handler <- R6Class("Bam_Handler",
             }
             return(lapply(alignment, weighted_coverage))
         },
-        generic_get_coverage = function(bam_file, regions, force_seqlevels = FALSE, count=NULL) {
+        generic_get_coverage = function(bam_file, regions, force_seqlevels = FALSE, count=NULL, simplify=TRUE) {
             private$check_bam_file(bam_file)
             regions <- private$prepare_regions(regions, bam_file,
                                                 force_seqlevels)
-            private$extract_coverage_by_regions(regions, bam_file, count,
+            coverages = private$extract_coverage_by_regions(regions, bam_file, count,
                                 paired_end = self$parameters[['paired_end']],
                                 strand_specific = self$parameters[['strand_specific']],
                                 paired_end_strand_mode = self$parameters[['paired_end_strand_mode']])
+                                
+            if(simplify && !self$parameters[["strand_specific"]]) {
+                return(coverages[["*"]])
+            } else {
+                return(coverages)
+            }                                
         }
     )
 )
