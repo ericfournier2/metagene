@@ -212,6 +212,11 @@ metagene <- R6Class("metagene",
                                 force_seqlevels = FALSE, paired_end = FALSE,
                                 assay = 'chipseq', strand_specific=FALSE,
                                 paired_end_strand_mode=2) {
+
+            # Validate the format of bam_files, since it is used to preprocess certain
+            # parameters before initialization.
+            private$validate_bam_files_format(bam_files)
+            
             # Initialize parameter handler.
             private$ph <- parameter_manager$new(
                 param_values=list(
@@ -405,6 +410,9 @@ metagene <- R6Class("metagene",
         #    return(private$design_coverages)
         #},
         add_design = function(design, check_bam_files = FALSE) {
+            design = private$clean_design(design, private$ph$get("bam_files"))
+            
+            # Update the design and remove invalidated table and data-frame.
             if(private$ph$update_params(design)) {
                 private$table <- NULL
                 private$df <- NULL
@@ -418,6 +426,7 @@ metagene <- R6Class("metagene",
             }
 
             private$validate_flip_regions(flip_regions)
+            design = private$clean_design(design, private$ph$get("bam_files"))
             
             if(private$ph$update_params(design, bin_count, noise_removal, normalization)) {
                 private$table = NULL
@@ -1345,8 +1354,12 @@ metagene <- R6Class("metagene",
             }        
         },        
         validate_design = function(design) {
+            private$validate_design_format(design)
+            private$validate_design_values(design)
+        },
+        validate_design_format = function(design) {
             if(!is.data.frame(design)) {
-                stop("design must be a data.frame object.")
+                stop("design must be a data.frame object, NULL or NA")
             }
 
             # Validate that we have enough columns and that they are of the right types.
@@ -1360,7 +1373,8 @@ metagene <- R6Class("metagene",
                 stop(paste0("All design column, except the first one,",
                                 " must be in numeric format"))
             }
-
+        },
+        validate_design_values = function(design) {
             # At least one file must be used in the design
             if (sum(rowSums(design[ , -1, drop=FALSE]) > 0) == 0) {
                 stop("At least one BAM file must be used in the design.")
@@ -1369,8 +1383,9 @@ metagene <- R6Class("metagene",
             # Check if used bam files exist.
             non_empty_rows = rowSums(design[, -1, drop=FALSE]) > 0
             if (!all(purrr::map_lgl(design$Samples[non_empty_rows], private$check_bam_files))) {
-                stop("At least one BAM file does not exist")
+                warning("At least one BAM file does not exist")
             }
+        
         },
         validate_alpha = function(alpha) {
             stopifnot(is.numeric(alpha))
@@ -1425,13 +1440,13 @@ metagene <- R6Class("metagene",
                 stop("verbose must be a logicial value (TRUE or FALSE)")
             }       
         },
-        validate_force_seqlevels = function(force_seq_levels) {
+        validate_force_seqlevels = function(force_seqlevels) {
             if (!is.logical(force_seqlevels)) {
                 stop(paste("force_seqlevels must be a logicial ",
                             "value (TRUE or FALSE)",sep=""))
             }        
         },
-        validate_padding_size = function(x) {
+        validate_padding_size = function(padding_size) {
             if (!(is.numeric(padding_size) || is.integer(padding_size)) ||
                 padding_size < 0 || as.integer(padding_size) != padding_size) {
                 stop("padding_size must be a non-negative integer")
@@ -1446,22 +1461,22 @@ metagene <- R6Class("metagene",
             }        
         },
         validate_bam_files = function(bam_files) {
+            private$validate_bam_files_format(bam_files)
+            private$validate_bam_files_values(bam_files)
+        },
+        validate_bam_files_format = function(bam_files) {
             if (!is.vector(bam_files, "character")) {
                 stop("bam_files must be a vector of BAM filenames.")
-            }
+            }      
+        },
+        validate_bam_files_values = function(bam_files) {
             if (!all(sapply(bam_files, file.exists))) {
                 stop("At least one BAM file does not exist.")
             }        
-        },
+        },        
         validate_combination = function(params) {
             if(params$assay=="chipseq" && is.null(params$bin_count)) {
                 stop("bin_count cannot be NULL in chipseq assays.")
-            }
-            
-            if (check_bam_files == TRUE) {
-                if(!all(params$design[,1] %in% names(params$bam_files))) {
-                    stop("Design contains bam files absent from bam_files.")
-                }
             }
         },
         get_complete_design = function(bam_files) {
@@ -1519,6 +1534,39 @@ metagene <- R6Class("metagene",
             } else {
                 # For all other fields, just return the value
                 value
+            }
+        },
+        clean_design = function(design, bam_files) {
+            # If no design is provided, use the default one.
+            if(is.null(design)) {
+                design = private$get_complete_design(bam_files)
+            }
+            
+            # NA will be overwritten with the previous design later on.
+            if(!is.data.frame(design) && is.na(design)) {
+                return(NA)
+            }
+            
+            # Make sure the design is in the correct format (data-frame
+            # with at least 2 columns) before we try improving it.
+            private$validate_design_format(design)
+            
+            # Standardize names used in first column to match those
+            # used in bam_files.
+
+            design_bams = as.character(design[,1])
+            design[,1] = design_bams
+            if(all(design_bams %in% names(bam_files))) {
+                return(design)
+            } else {
+                inferred_names = names(private$name_from_path(design_bams))
+                if(all(inferred_names %in% names(bam_files))) {
+                    design[,1] = inferred_names
+                    warning("Modifying first column of design to match the names of bam_files rather than their file name.")
+                    return(design)
+                } else {
+                    stop("Design contains samples absent from the list of bam files provided on initialization.")
+                }
             }
         }
     )

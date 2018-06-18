@@ -23,6 +23,10 @@ regions <- lapply(metagene:::get_demo_regions(), rtracklayer::import)
 demo_bh <- metagene:::Bam_Handler$new(bam_files)
 demo_bh_one <- metagene:::Bam_Handler$new(bam_files[1])
 
+numerically_identical_coverage <- function(coverage_1, coverage_2) {
+    return(all(all(coverage_1==coverage_2)))
+}
+
 ###################################################
 ## Test the Bam_Handler$new() function (initialize)
 ###################################################
@@ -240,7 +244,7 @@ test.bam_handler_get_coverage_valid_use <- function() {
     param <- Rsamtools::ScanBamParam(which = reduce(region))
     exp <- GenomicAlignments::readGAlignments(bam_file, param = param)
     exp <- GenomicAlignments::coverage(exp)
-    checkIdentical(obs, exp)
+    checkTrue(numerically_identical_coverage(obs, exp))
 }
 
 ## Multicore
@@ -275,7 +279,7 @@ test.bam_handler_get_coverage_duplicated_regions <- function() {
     param <- Rsamtools::ScanBamParam(which = reduce(region))
     exp <- GenomicAlignments::readGAlignments(bam_file, param = param)
     exp <- GenomicAlignments::coverage(exp)
-    checkIdentical(obs, exp)
+    checkTrue(numerically_identical_coverage(obs, exp))
     # Sanity check
     param <- Rsamtools::ScanBamParam(which = region)
     sane <- GenomicAlignments::readGAlignments(bam_file, param = param)
@@ -416,7 +420,7 @@ test.bam_handler_get_normalized_coverage_valid_use <- function() {
     param <- Rsamtools::ScanBamParam(which = reduce(region))
     exp <- GenomicAlignments::readGAlignments(bam_file, param = param)
     exp <- GenomicAlignments::coverage(exp) * weight
-    checkIdentical(obs, exp)
+    checkTrue(numerically_identical_coverage(obs, exp))
 }
 
 ## Multicore

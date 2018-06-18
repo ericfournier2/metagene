@@ -197,14 +197,12 @@ Bam_Handler <- R6Class("Bam_Handler",
             private$bam_files
         },
         get_coverage = function(bam_file, regions, force_seqlevels = FALSE, simplify=TRUE) {
-            coverages = private$generic_get_coverage(bam_file, regions, force_seqlevels, 
-                                                     simplify=simplify)
+            private$generic_get_coverage(bam_file, regions, force_seqlevels, simplify=simplify)
         },
         get_normalized_coverage = function(bam_file, regions,
                             force_seqlevels = FALSE, simplify=TRUE) {
             count <- self$get_aligned_count(bam_file)
             private$generic_get_coverage(bam_file, regions, force_seqlevels, count, simplify=simplify)
-            private$check_bam_file(bam_file)
         },
         get_noise_ratio = function(chip_bam_names, input_bam_names) {
             lapply(c(chip_bam_names, input_bam_names), private$check_bam_file)

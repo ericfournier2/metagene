@@ -39,7 +39,9 @@ demo_mg_min <- metagene$new(regions = region, bam_files = bam_file)
 
 ## Invalid verbose value
 test.metagene_initialize_invalid_verbose_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(verbose = "ZOMBIES"),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            verbose = "ZOMBIES"),
                     error = conditionMessage)
     exp <- "verbose must be a logicial value (TRUE or FALSE)"
     checkIdentical(obs, exp)
@@ -47,7 +49,9 @@ test.metagene_initialize_invalid_verbose_value <- function() {
 
 ## Invalid force_seqlevels value
 test.metagene_initialize_invalid_force_seqlevels_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(force_seqlevels = "ZOMBIES"),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            force_seqlevels = "ZOMBIES"),
                     error = conditionMessage)
     exp <- "force_seqlevels must be a logicial value (TRUE or FALSE)"
     checkIdentical(obs, exp)
@@ -55,7 +59,9 @@ test.metagene_initialize_invalid_force_seqlevels_value <- function() {
 
 ## Negative padding_size value
 test.metagene_initialize_negative_padding_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(padding_size = -1),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            padding_size = -1),
                     error = conditionMessage)
     exp <- "padding_size must be a non-negative integer"
     checkIdentical(obs, exp)
@@ -63,7 +69,9 @@ test.metagene_initialize_negative_padding_value <- function() {
 
 ## Non-integer padding_size value
 test.metagene_initialize_invalid_string_padding_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(padding_size = "NEW_ZOMBIE"),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            padding_size = "NEW_ZOMBIE"),
                     error = conditionMessage)
     exp <- "padding_size must be a non-negative integer"
     checkIdentical(obs, exp)
@@ -71,7 +79,9 @@ test.metagene_initialize_invalid_string_padding_value <- function() {
 
 ## Numerical padding_size value
 test.metagene_initialize_invalid_numerical_padding_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(padding_size = 1.2),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            padding_size = 1.2),
                     error = conditionMessage)
     exp <- "padding_size must be a non-negative integer"
     checkIdentical(obs, exp)
@@ -79,50 +89,60 @@ test.metagene_initialize_invalid_numerical_padding_value <- function() {
 
 ## Negative padding_size value
 test.metagene_initialize_negative_padding_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(core = -1),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            core = -1),
                     error = conditionMessage)
-    exp <- "cores must be a positive numeric or BiocParallelParam instance"
+    exp <- "cores must be a positive integer or a BiocParallelParam instance."
     checkIdentical(obs, exp)
 }
 
 ## Non-integer core value
 test.metagene_initialize_invalid_string_core_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(core = "ZOMBIE2"),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            core = "ZOMBIE2"),
                     error = conditionMessage)
-    exp <- "cores must be a positive numeric or BiocParallelParam instance"
+    exp <- "cores must be a positive integer or a BiocParallelParam instance."
     checkIdentical(obs, exp)
 }
 
 ## Numerical core value
 test.metagene_initialize_invalid_numerical_core_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(core = 1.2),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            core = 1.2),    
                     error = conditionMessage)
-    exp <- "cores must be a positive numeric or BiocParallelParam instance"
+    exp <- "cores must be a positive integer or a BiocParallelParam instance."
     checkIdentical(obs, exp)
 }
 
 ## Zero core value
 test.metagene_initialize_invalid_zero_core_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(core = 0),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = get_demo_bam_files(),
+                                            core = 0),
                     error = conditionMessage)
-    exp <- "cores must be a positive numeric or BiocParallelParam instance"
+    exp <- "cores must be a positive integer or a BiocParallelParam instance."
     checkIdentical(obs, exp)
 }
 
 ## Non-character vector bam_files value
 test.metagene_initialize_invalid_num_vector_bam_files_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(bam_files = c(2,4,3)),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = c(2,4,3)),
                     error = conditionMessage)
-    exp <- "bam_files must be a vector of BAM filenames"
+    exp <- "bam_files must be a vector of BAM filenames."
     checkIdentical(obs, exp)
 }
 
 ## Non-vector bam_files value
 test.metagene_initialize_invalid_list_bam_files_value <- function() {
     bam_files <- list(a = "ZOMBIE_01.txt", b = "ZOMBIE_02.txt")
-    obs <- tryCatch(metagene:::metagene$new(bam_files = bam_files),
+    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+                                            bam_files = bam_files),
                     error = conditionMessage)
-    exp <- "bam_files must be a vector of BAM filenames"
+    exp <- "bam_files must be a vector of BAM filenames."
     checkIdentical(obs, exp)
 }
 # Not indexed bam in bam_files value
@@ -347,7 +367,8 @@ test.metagene_get_design_valid_usage <- function() {
     mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(get_demo_design())
     design <- mg$get_design()
-    checkIdentical(design, get_demo_design())
+    checkIdentical(mg$get_design()[,-1], get_demo_design()[,-1])
+    checkIdentical(mg$get_design()[,1], names(mg$get_params()[["bam_files"]]))
 }
 
 ##################################################
@@ -790,7 +811,8 @@ test.metagene_get_normalized_coverages_invalid_filename_among_valid <-
 test.metagene_add_design_valid_design_data_frame <- function() {
     mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(get_demo_design())
-    checkIdentical(mg$get_design(), get_demo_design())
+    checkIdentical(mg$get_design()[,-1], get_demo_design()[,-1])
+    checkIdentical(mg$get_design()[,1], names(mg$get_params()[["bam_files"]]))
 }
 
 ## Valid design NULL
@@ -825,7 +847,8 @@ test.metagene_add_design_valid_design_na_null_first <- function() {
 test.metagene_add_design_valid_design_na_design_first <- function() {
     mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = get_demo_design())
-    checkIdentical(mg$get_design(), get_demo_design())
+    checkIdentical(mg$get_design()[,-1], get_demo_design()[,-1])
+    checkIdentical(mg$get_design()[,1], names(mg$get_params()[["bam_files"]]))
 }
 
 ## Valid design, factor sample names
@@ -837,7 +860,7 @@ test.metagene_add_design_valid_design_factor_sample_names <- function() {
     checkTrue(is.factor(design[,1]))
     checkTrue(is.character(mg$get_design()[,1]))
     checkIdentical(design[,-1], mg$get_design()[,-1])
-    checkIdentical(as.character(design[,1]), mg$get_design()[,1])
+    checkIdentical(names(mg$get_params()[["bam_files"]]), mg$get_design()[,1])
 }
 
 ## Valid check_bam_files TRUE NA design
@@ -863,7 +886,8 @@ test.metagene_add_design_valid_check_bam_files_true_design_design <- function()
 {
     mg <- demo_mg$clone(deep=TRUE)
     mg$add_design(design = get_demo_design(), check_bam_files = TRUE)
-    checkIdentical(mg$get_design(), get_demo_design())
+    checkIdentical(mg$get_design()[,-1], get_demo_design()[,-1])
+    checkIdentical(mg$get_design()[,1], names(mg$get_params()[["bam_files"]]))
 }
 
 ## Invalid design class
@@ -904,15 +928,6 @@ test.metagene_add_design_invalid_design_columns_two_plus_class <- function() {
     checkIdentical(obs, exp)
 }
 
-## Invalid check_bam_files class
-test.metagene_add_design_invalid_check_bam_files_class <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    obs <- tryCatch(mg$add_design(check_bam_files = 1),
-                    error = conditionMessage)
-    exp <- "is.logical(check_bam_files) is not TRUE"
-    checkIdentical(obs, exp)
-}
-
 ## Invalid bam file check_bam_files TRUE
 test.metagene_add_design_invalid_bam_file_check_bam_files_true <- function() {
     mg <- demo_mg$clone(deep=TRUE)
@@ -920,7 +935,7 @@ test.metagene_add_design_invalid_bam_file_check_bam_files_true <- function() {
     design[1,1] <- "not_a_valid_bam_file"
     obs <- tryCatch(mg$add_design(design = design, check_bam_files = TRUE),
                     error = conditionMessage)
-    exp <- "Design contains bam files absent from metagene."
+    exp <- "Design contains samples absent from the list of bam files provided on initialization."
     checkIdentical(obs, exp)
 }
 
@@ -929,8 +944,10 @@ test.metagene_add_design_invalid_bam_file_check_bam_files_false <- function() {
     mg <- demo_mg$clone(deep=TRUE)
     design <- get_demo_design()
     design[1,1] <- "not_a_valid_bam_file"
-    obs <- mg$add_design(design = design, check_bam_files = FALSE)
-    checkIdentical(design, mg$get_design())
+    obs <- tryCatch(mg$add_design(design = design, check_bam_files = TRUE),
+                    error = conditionMessage)
+    exp <- "Design contains samples absent from the list of bam files provided on initialization."
+    checkIdentical(obs, exp)
 }
 
 ##################################################
@@ -1132,7 +1149,7 @@ test.metagene_produce_table_invalid_design_not_defined_file <- function() {
                         b = rep(1, length(bam_files) + 1))
  obs <- tryCatch(mg$produce_table(design = designNew),
                 error = conditionMessage)
- exp <- "At least one BAM file does not exist"
+ exp <- "Design contains samples absent from the list of bam files provided on initialization."
  checkIdentical(obs, exp)
 }
 
@@ -1179,7 +1196,7 @@ test.metagene_produce_table_invalid_noise_removal_class <- function() {
  mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(noise_removal = 1234),
                 error = conditionMessage)
- exp <- "noise_removal must be NA, NULL, \"NCIS\"."
+ exp <- 'noise_removal must be NA, NULL, or "NCIS".'
  checkIdentical(obs, exp)
 }
 
@@ -1188,7 +1205,7 @@ test.metagene_produce_table_invalid_noise_removal_value <- function() {
  mg <- demo_mg$clone(deep=TRUE)
  obs <- tryCatch(mg$produce_table(noise_removal = "CSI"),
                 error = conditionMessage)
- exp <- "noise_removal must be NA, NULL, \"NCIS\"."
+ exp <- 'noise_removal must be NA, NULL, or "NCIS".'
  checkIdentical(obs, exp)
 }
 

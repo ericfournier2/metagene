@@ -11,6 +11,8 @@ parameter_manager <- R6Class("parameter_manager",
                 private$overall_validation = overall_validation
             }
             private$locked = locked
+            
+            private$validate_all()
         },
         get = function(param_name) {
             private$validate_exists(param_name)
@@ -113,6 +115,17 @@ parameter_manager <- R6Class("parameter_manager",
         # cases (NULL, lists) before testing for NA directly.
         test_for_na = function(value) {
             return(!(is.null(value) || is.list(value) || !is.na(value)))
+        },
+        validate_all = function() {
+            for(param_name in names(private$parameter_values)) {
+                if(!is.null(private$parameter_validations[[param_name]])) {
+                    private$parameter_validations[[param_name]](private$parameter_values[[param_name]])
+                }
+            }
+            
+            if(!is.null(private$overall_validation)) {
+                private$overall_validation(private$parameter_values)
+            }
         }
     )
 )
