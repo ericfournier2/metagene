@@ -274,8 +274,17 @@ metagene <- R6Class("metagene",
             private$regions <- private$prepare_regions(regions, private$ph$get("assay"))
 
             # Parse bam files
-            private$print_verbose("Calculating coverages...\n")
+            private$print_verbose("Calculating coverages...")
+            bm_before_time = Sys.time()
+            bm_before_mem = pryr::mem_used()
             private$coverages <- private$produce_coverages()    
+            bm_after_time = Sys.time()
+            bm_after_mem = pryr::mem_used()            
+            bm_time = bm_after_time - bm_before_time
+            bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
+            
+            private$print_verbose(paste0("BENCHMARK-TIME-Coverage:", bm_time))
+            private$print_verbose(paste0("BENCHMARK-MEMORY-Coverage:", bm_mem))
         },
         get_bam_count = function(filename) {
             # Parameters validation are done by Bam_Handler object
@@ -435,7 +444,20 @@ metagene <- R6Class("metagene",
             if (is.null(private$table)) {            
                 # Normalize if necessary.
                 if (!is.null(private$ph$get("normalization"))) {
-                    coverages <- private$get_normalized_coverages_internal()
+                    bm_before_time = Sys.time()
+                    bm_before_mem = pryr::mem_used()
+                    
+                    coverages <- private$get_normalized_coverages_internal()  
+                    
+                    bm_after_time = Sys.time()
+                    bm_after_mem = pryr::mem_used()            
+                    bm_time = bm_after_time - bm_before_time
+                    bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
+                    
+                    private$print_verbose(paste0("BENCHMARK-TIME-NormalizeCoverage:", bm_time))
+                    private$print_verbose(paste0("BENCHMARK-MEMORY-NormalizeCoverage:", bm_mem))
+                    
+                    
                     message('Normalization done')
                 } else {
                     coverages <- private$get_raw_coverages_internal()
@@ -490,13 +512,24 @@ metagene <- R6Class("metagene",
                 if (is.null(self$get_table())) {
                     self$produce_table()
                 }
-            
+
+                bm_before_time = Sys.time()
+                bm_before_mem = pryr::mem_used()
+
                 # 2. Produce the data.frame 
                 private$df <- private$produce_data_frame_internal(input_table=self$get_table(),
                     alpha=alpha, sample_count=sample_count, avoid_gaps=avoid_gaps, 
                     gaps_threshold=gaps_threshold, bam_name=bam_name,
                     assay=private$ph$get('assay'), input_design=self$get_design,  
                     bin_count=private$ph$get('bin_count'))
+
+                bm_after_time = Sys.time()
+                bm_after_mem = pryr::mem_used()            
+                bm_time = bm_after_time - bm_before_time
+                bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
+                
+                private$print_verbose(paste0("BENCHMARK-TIME-ProduceDataFrame:", bm_time))
+                private$print_verbose(paste0("BENCHMARK-MEMORY-ProduceDataFrame:", bm_mem))
                     
                 invisible(self)
             }
@@ -1343,13 +1376,37 @@ metagene <- R6Class("metagene",
                 if (assay == 'rnaseq') {
                     return(private$produce_rna_table(coverages_s, design, regions, bin_count))
                 } else { # chipseq
+                    bm_before_time = Sys.time()
+                    bm_before_mem = pryr::mem_used()
+
                     if (!is.null(noise_removal)) {
                         coverages_s <- private$remove_controls(coverages_s, design)
                     } else {
                         coverages_s <- private$merge_chip(coverages_s, design)
                     }
 
-                    return(private$produce_chip_table(coverages_s, design, regions, bin_count))
+                    bm_after_time = Sys.time()
+                    bm_after_mem = pryr::mem_used()            
+                    bm_time = bm_after_time - bm_before_time
+                    bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
+                    
+                    private$print_verbose(paste0("BENCHMARK-TIME-MergeCoverage:", bm_time))
+                    private$print_verbose(paste0("BENCHMARK-MEMORY-MergeCoverage:", bm_mem))                    
+                    
+                    bm_before_time = Sys.time()
+                    bm_before_mem = pryr::mem_used()
+
+                    res_table = private$produce_chip_table(coverages_s, design, regions, bin_count)
+                    
+                    bm_after_time = Sys.time()
+                    bm_after_mem = pryr::mem_used()            
+                    bm_time = bm_after_time - bm_before_time
+                    bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
+                    
+                    private$print_verbose(paste0("BENCHMARK-TIME-ProduceTable:", bm_time))
+                    private$print_verbose(paste0("BENCHMARK-MEMORY-ProduceTable:", bm_mem))
+                    
+                    return(res_table)
                 }
             }        
         },        
