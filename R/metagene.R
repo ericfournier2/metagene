@@ -264,10 +264,19 @@ metagene <- R6Class("metagene",
             
             # Prepare bam files
             private$print_verbose("Prepare bam files...")
+            bm_before_time = Sys.time()
+            bm_before_mem = pryr::mem_used()
             private$bam_handler <- Bam_Handler$new(private$ph$get("bam_files") , cores = cores,
                                         paired_end = paired_end,
                                         strand_specific=strand_specific,
                                         paired_end_strand_mode=paired_end_strand_mode)
+            bm_after_time = Sys.time()
+            bm_after_mem = pryr::mem_used()            
+            bm_time = difftime(bm_after_time, bm_before_time, unit="secs")
+            bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
+            
+            private$print_verbose(paste0("BENCHMARK-TIME-PrepareBam:", bm_time))
+            private$print_verbose(paste0("BENCHMARK-MEMORY-PrepareBam:", bm_mem))
 
             # Prepare regions
             private$print_verbose("Prepare regions...")
@@ -280,7 +289,7 @@ metagene <- R6Class("metagene",
             private$coverages <- private$produce_coverages()    
             bm_after_time = Sys.time()
             bm_after_mem = pryr::mem_used()            
-            bm_time = bm_after_time - bm_before_time
+            bm_time = difftime(bm_after_time, bm_before_time, unit="secs")
             bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
             
             private$print_verbose(paste0("BENCHMARK-TIME-Coverage:", bm_time))
@@ -451,7 +460,7 @@ metagene <- R6Class("metagene",
                     
                     bm_after_time = Sys.time()
                     bm_after_mem = pryr::mem_used()            
-                    bm_time = bm_after_time - bm_before_time
+                    bm_time = difftime(bm_after_time, bm_before_time, unit="secs")
                     bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
                     
                     private$print_verbose(paste0("BENCHMARK-TIME-NormalizeCoverage:", bm_time))
@@ -525,7 +534,7 @@ metagene <- R6Class("metagene",
 
                 bm_after_time = Sys.time()
                 bm_after_mem = pryr::mem_used()            
-                bm_time = bm_after_time - bm_before_time
+                bm_time = difftime(bm_after_time, bm_before_time, unit="secs")
                 bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
                 
                 private$print_verbose(paste0("BENCHMARK-TIME-ProduceDataFrame:", bm_time))
@@ -1387,7 +1396,7 @@ metagene <- R6Class("metagene",
 
                     bm_after_time = Sys.time()
                     bm_after_mem = pryr::mem_used()            
-                    bm_time = bm_after_time - bm_before_time
+                    bm_time = difftime(bm_after_time, bm_before_time, unit="secs")
                     bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
                     
                     private$print_verbose(paste0("BENCHMARK-TIME-MergeCoverage:", bm_time))
@@ -1400,7 +1409,7 @@ metagene <- R6Class("metagene",
                     
                     bm_after_time = Sys.time()
                     bm_after_mem = pryr::mem_used()            
-                    bm_time = bm_after_time - bm_before_time
+                    bm_time = difftime(bm_after_time, bm_before_time, unit="secs")
                     bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
                     
                     private$print_verbose(paste0("BENCHMARK-TIME-ProduceTable:", bm_time))
