@@ -1383,7 +1383,19 @@ metagene <- R6Class("metagene",
                 return(NULL)
             } else {
                 if (assay == 'rnaseq') {
-                    return(private$produce_rna_table(coverages_s, design, regions, bin_count))
+
+                    bm_before_time = Sys.time()
+                    bm_before_mem = pryr::mem_used()
+
+                    res_table = private$produce_rna_table(coverages_s, design, regions, bin_count)
+                    
+                    bm_after_time = Sys.time()
+                    bm_after_mem = pryr::mem_used()            
+                    bm_time = difftime(bm_after_time, bm_before_time, unit="secs")
+                    bm_mem = structure(bm_after_mem - bm_before_mem, class="bytes")
+                    private$print_verbose(paste0("BENCHMARK-TIME-ProduceTable:", bm_time))
+                    private$print_verbose(paste0("BENCHMARK-MEMORY-ProduceTable:", bm_mem))          
+                    return(res_table)
                 } else { # chipseq
                     bm_before_time = Sys.time()
                     bm_before_mem = pryr::mem_used()
