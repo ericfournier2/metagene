@@ -1331,12 +1331,16 @@ metagene <- R6Class("metagene",
                 return(results)            
             }
         },
-        matrix_resampling = function(input_table, input_regions, input_design, sample_count, bin_count, alpha) {
+        matrix_resampling = function(input_table, input_regions, input_design, sample_count, bin_count, alpha, reuse=TRUE) {
             # Given a vector x, resamples it sample_count time and returns
             # the mean and confidence intervals at the alpha level.
-            calc_bin_ci = function(x, sample_count, alpha) { 
+            calc_bin_ci = function(x, sample_count, alpha, sample_indices=NULL) { 
+                if(is.null(sample_indices)) {
+                    sample_indices = sample.int(length(x), size=length(x)*sample_count, replace=TRUE)
+                }
+                
                 # Resample into a matrix of length(x) rows and sample_count columns.
-                sampled = matrix(sample(x, length(x)*sample_count, replace=TRUE), ncol=sample_count);
+                sampled = matrix(x[sample_indices], ncol=sample_count);
                 
                 # Calculate the column means, which are the means of each resampling.
                 means = colMeans(sampled);
@@ -1348,9 +1352,15 @@ metagene <- R6Class("metagene",
             # Given a list with elements Region, Design and Matrix, resamples all columns
             # of Matrix sample_count times and calculate confidence intervals of the means at level alpha.
             # The results are stored as a data-frame with the additional design and region columns.
-            calc_ci = function(x, sample_count, alpha) {
+            calc_ci = function(x, sample_count, alpha, reuse) {
+                if(reuse) {
+                    sample_indices = sample.int(nrow(x$Matrix), size=nrow(x$Matrix)*sample_count, replace=TRUE)
+                } else {
+                    sample_indices = NULL
+                }
+                
                 # Resample and calculate CIs for all columns of the matrix.
-                res = t(apply(x$Matrix, 2, calc_bin_ci, sample_count=sample_count, alpha=alpha))
+                res = t(apply(x$Matrix, 2, calc_bin_ci, sample_count=sample_count, alpha=alpha, sample_indices=sample_indices))
                 
                 # Format the resulting data-frame correctly.
                 colnames(res) = c("value", "qinf", "qsup")
@@ -1378,7 +1388,9 @@ metagene <- R6Class("metagene",
                         data = matrix_list,
                         FUN = calc_ci,
                         sample_count = sample_count,
-                        alpha = alpha)
+                        alpha = alpha,
+                        reuse=FALSE)
+            #ci = lapply(matrix_list, calc_ci, sample_count = sample_count, alpha = alpha)
             
             # Concatenate resampling results and add bin column.
             res = data.table::rbindlist(ci, idcol=NULL, use.names=TRUE, fill=FALSE)
