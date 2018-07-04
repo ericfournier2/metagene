@@ -263,19 +263,21 @@ metagene <- R6Class("metagene",
             private$parallel_job <- Parallel_Job$new(cores)
             
             # Prepare bam files
-            private$print_verbose("Prepare bam files...")
+            bm = private$start_bm("Prepare bam files")
             private$bam_handler <- Bam_Handler$new(private$ph$get("bam_files") , cores = cores,
                                         paired_end = paired_end,
                                         strand_specific=strand_specific,
                                         paired_end_strand_mode=paired_end_strand_mode)
+            private$stop_bm(bm)
 
             # Prepare regions
             private$print_verbose("Prepare regions...")
             private$regions <- private$prepare_regions(regions, private$ph$get("assay"))
 
             # Parse bam files
-            private$print_verbose("Calculating coverages...\n")
+            bm = private$start_bm("Calculating coverages")
             private$coverages <- private$produce_coverages()    
+            private$stop_bm(bm)
         },
         get_bam_count = function(filename) {
             # Parameters validation are done by Bam_Handler object
@@ -318,20 +320,10 @@ metagene <- R6Class("metagene",
             }
             assay = private$ph$get("assay")
             if (assay == 'chipseq') {
-                matrices <- list()
-                nbcol <- private$ph$get("bin_count")
-                nbrow <- vapply(self$get_regions(), length, numeric(1))
-                for (regions in names(self$get_regions())) {
-                    matrices[[regions]] <- list()
-                    for (design_name in colnames(self$get_design())[-1]) {
-                        matrices[[regions]][[design_name]] <- list()
-                        matrices[[regions]][[design_name]][["input"]] <- 
-                                matrix(private$table[region == regions & 
-                                design == design_name,]$value, 
-                                nrow=nbrow[regions], ncol=nbcol, byrow=TRUE)
-                    }
-                }
-                return (matrices)
+                return(matrices_from_table(self$get_table(),
+                                           self$get_regions(), 
+                                           self$get_design(), 
+                                           private$ph$get("bin_count")))
             } else {
                 stop(paste('unsupported function for assay of type',
                         assay,
@@ -435,8 +427,9 @@ metagene <- R6Class("metagene",
             if (is.null(private$table)) {            
                 # Normalize if necessary.
                 if (!is.null(private$ph$get("normalization"))) {
-                    coverages <- private$get_normalized_coverages_internal()
-                    message('Normalization done')
+                    bm = private$start_bm("Normalizing coverages")
+                    coverages <- private$get_normalized_coverages_internal()    
+                    private$stop_bm(bm)
                 } else {
                     coverages <- private$get_raw_coverages_internal()
                 }
@@ -490,13 +483,15 @@ metagene <- R6Class("metagene",
                 if (is.null(self$get_table())) {
                     self$produce_table()
                 }
-            
+
+                bm = private$start_bm("Producing data-frame")
                 # 2. Produce the data.frame 
                 private$df <- private$produce_data_frame_internal(input_table=self$get_table(),
                     alpha=alpha, sample_count=sample_count, avoid_gaps=avoid_gaps, 
                     gaps_threshold=gaps_threshold, bam_name=bam_name,
-                    assay=private$ph$get('assay'), input_design=self$get_design,  
-                    bin_count=private$ph$get('bin_count'))
+                    assay=private$ph$get('assay'), input_design=self$get_design(),  
+                    input_regions=self$get_regions(), bin_count=private$ph$get('bin_count'))
+                private$stop_bm(bm)
                     
                 invisible(self)
             }
@@ -1223,45 +1218,39 @@ metagene <- R6Class("metagene",
         },
         produce_data_frame_internal = function(input_table, alpha, sample_count,
                             avoid_gaps, gaps_threshold, bam_name,
-                            assay, input_design, bin_count) {
-            results <- data.table::copy(input_table)
-            
-            if(assay=='rnaseq' && !is.null(bin_count)) {
-                sample_size_columns = quote(.(region, design))
-            } else {
-                sample_size_columns = quote(.(design))
-            }
-        
-            # Set up bootstrap analysis.
-            sample_size <- input_table[bin == 1,][
-                                    ,.N, by = eval(sample_size_columns)][
-                                    , .(min(N))]
-            sample_size <- as.integer(sample_size)
-        
-            out_cols <- c("value", "qinf", "qsup")
-            bootstrap <- function(df) {
-                sampling <- matrix(df$value[sample(seq_along(df$value),
-                                        sample_size * sample_count,
-                                        replace = TRUE)],
-                                ncol = sample_size)
-                values <- colMeans(sampling)
-                res <- quantile(values, c(alpha/2, 1-(alpha/2)))
-                res <- c(mean(df$value), res)
-                names(res) <- out_cols
-                as.list(res)
-            }            
-        
-            skip_bootstrap = FALSE
-            if (assay == 'chipseq') {
-                message('produce data frame : ChIP-Seq')
-        
-                bootstrap_cols = quote(.(region, design, bin))
-                unique_col = c("region", "design", "bin", "strand")
-            } else {
+                            assay, input_design, input_regions, bin_count) {
+            if(assay =='rnaseq') {
+                if(!is.null(bin_count)) {
+                    sample_size_columns = quote(.(region, design))
+                } else {
+                    sample_size_columns = quote(.(design))
+                }
+                
+                # Set up bootstrap analysis.
+                sample_size <- input_table[bin == 1,][
+                                        ,.N, by = eval(sample_size_columns)][
+                                        , .(min(N))]
+                sample_size <- as.integer(sample_size)
+                
+                out_cols <- c("value", "qinf", "qsup")
+                bootstrap <- function(df) {
+                    sampling <- matrix(df$value[sample(seq_along(df$value),
+                                            sample_size * sample_count,
+                                            replace = TRUE)],
+                                    ncol = sample_size)
+                    values <- colMeans(sampling)
+                    res <- quantile(values, c(alpha/2, 1-(alpha/2)))
+                    res <- c(mean(df$value), res)
+                    names(res) <- out_cols
+                    as.list(res)
+                }            
+                
+                skip_bootstrap = FALSE
                 if(avoid_gaps) {
                     if (!is.null(bam_name)){
                         bam_name = results$bam[1]
                     }
+                    local_df = data.table::copy(input_table)
                     results = private$data_frame_avoid_gaps(results, bam_name, gaps_threshold,
                                                             private$ph$get("flip_regions"), 
                                                             private$ph$get("bin_count"))
@@ -1273,31 +1262,105 @@ metagene <- R6Class("metagene",
                     bootstrap_cols = quote(.(region, design, nuctot))
                     unique_col = c("region", "design", "nuctot")
                     
-                    if(all(rowSums(design[,-1, drop=FALSE]) == 1) &
-                        all(colSums(design[,-1, drop=FALSE]) == 1)){
+                    if(all(rowSums(input_design[,-1, drop=FALSE]) == 1) &
+                        all(colSums(input_design[,-1, drop=FALSE]) == 1)){
                         results$qinf <- results$value
                         results$qsup <- results$value
                         skip_bootstrap = TRUE
                     }
                 } else {
                     message('produce data frame : RNA-Seq binned')
-        
+            
                     bootstrap_cols = quote(.(design, bin))
                     unique_col = c("design", "bin")
                 }
+                
+                if(!skip_bootstrap) {
+                    results <- local_df[,c(out_cols) := bootstrap(.SD), 
+                                        by = eval(bootstrap_cols)]
+                }
+                results <- unique(results, by=unique_col)
+                
+                results <- as.data.frame(results)
+                results$group <- as.factor(paste(results$design, results$region, sep="_"))
+                
+                return(results)
+            } else {
+                results <- private$matrix_resampling(input_table, input_regions, input_design, sample_count, bin_count, alpha)
+                
+                results <- as.data.frame(results)
+                results$group <- as.factor(paste(results$design, results$region, sep="_"))
+                
+                return(results)            
             }
-            
-            if(!skip_bootstrap) {
-                results <- results[,c(out_cols) := bootstrap(.SD), 
-                                    by = eval(bootstrap_cols)]
-            }
-            results <- unique(results, by=unique_col)
-            
-            results <- as.data.frame(results)
-            results$group <- as.factor(paste(results$design, results$region, sep="_"))
-            
-            return(results)
         },
+        matrix_resampling = function(input_table, input_regions, input_design, sample_count, bin_count, alpha, reuse=TRUE) {
+            # Given a vector x, resamples it sample_count time and returns
+            # the mean and confidence intervals at the alpha level.
+            calc_bin_ci = function(x, sample_count, alpha, sample_indices=NULL) { 
+                if(is.null(sample_indices)) {
+                    sample_indices = sample.int(length(x), size=length(x)*sample_count, replace=TRUE)
+                }
+                
+                # Resample into a matrix of length(x) rows and sample_count columns.
+                sampled = matrix(x[sample_indices], ncol=sample_count);
+                
+                # Calculate the column means, which are the means of each resampling.
+                means = colMeans(sampled);
+                
+                # Put the results in a named vector.
+                return(c(mean(x), quantile(means, c(alpha/2, 1-(alpha/2)))))
+            }
+            
+            # Given a list with elements Region, Design and Matrix, resamples all columns
+            # of Matrix sample_count times and calculate confidence intervals of the means at level alpha.
+            # The results are stored as a data-frame with the additional design and region columns.
+            calc_ci = function(x, sample_count, alpha, reuse) {
+                if(reuse) {
+                    sample_indices = sample.int(nrow(x$Matrix), size=nrow(x$Matrix)*sample_count, replace=TRUE)
+                } else {
+                    sample_indices = NULL
+                }
+                
+                # Resample and calculate CIs for all columns of the matrix.
+                res = t(apply(x$Matrix, 2, calc_bin_ci, sample_count=sample_count, alpha=alpha, sample_indices=sample_indices))
+                
+                # Format the resulting data-frame correctly.
+                colnames(res) = c("value", "qinf", "qsup")
+                res = data.frame(res)
+                res$design = x$Design
+                res$region = x$Region
+                
+                res
+            }
+            
+            # Get coverage matrices, and reformat them into a flat list
+            # so each matrix can be processed in parralel.
+            matrices = private$matrices_from_table(input_table, input_regions, input_design, bin_count)
+            matrix_list = list()
+            i=1
+            for(region in names(matrices)) {
+                for(design in names(matrices[[region]])) {
+                    matrix_list[[i]] = list(Region=region, Design=design, Matrix=matrices[[region]][[design]]$input)
+                    i = i + 1
+                }
+            }
+            
+            # Perform resampling in parralel.
+            ci <- private$parallel_job$launch_job(
+                        data = matrix_list,
+                        FUN = calc_ci,
+                        sample_count = sample_count,
+                        alpha = alpha,
+                        reuse=FALSE)
+            #ci = lapply(matrix_list, calc_ci, sample_count = sample_count, alpha = alpha)
+            
+            # Concatenate resampling results and add bin column.
+            res = data.table::rbindlist(ci, idcol=NULL, use.names=TRUE, fill=FALSE)
+            res$bin = 1:bin_count
+            
+            res
+        },      
         get_raw_coverages_internal = function(filenames = NULL) {
             if (is.null(filenames)) {
                 private$coverages
@@ -1341,15 +1404,27 @@ metagene <- R6Class("metagene",
                 return(NULL)
             } else {
                 if (assay == 'rnaseq') {
-                    return(private$produce_rna_table(coverages_s, design, regions, bin_count))
+                    bm = private$start_bm("Producing table (rnaseq)")
+                    res_table = private$produce_rna_table(coverages_s, design, regions, bin_count)
+                    private$stop_bm(bm)
+                    return(res_table)
                 } else { # chipseq
+                    
                     if (!is.null(noise_removal)) {
+                        bm = private$start_bm("Removing controls")
                         coverages_s <- private$remove_controls(coverages_s, design)
+                        private$stop_bm(bm)
                     } else {
+                        bm = private$start_bm("Merging coverages")
                         coverages_s <- private$merge_chip(coverages_s, design)
+                        private$stop_bm(bm)
                     }
 
-                    return(private$produce_chip_table(coverages_s, design, regions, bin_count))
+                    bm = private$start_bm("Producing table (chipseq)")
+                    res_table = private$produce_chip_table(coverages_s, design, regions, bin_count)
+                    private$stop_bm(bm)
+                    
+                    return(res_table)
                 }
             }        
         },        
@@ -1568,6 +1643,34 @@ metagene <- R6Class("metagene",
                     stop("Design contains samples absent from the list of bam files provided on initialization.")
                 }
             }
+        },
+        matrices_from_table = function(input_table, input_regions, input_design, bin_count) {
+            matrices <- list()
+            nbcol <- bin_count
+            nbrow <- vapply(input_regions, length, numeric(1))
+            for (regions in names(input_regions)) {
+                matrices[[regions]] <- list()
+                for (design_name in colnames(input_design)[-1]) {
+                    matrices[[regions]][[design_name]] <- list()
+                    matrices[[regions]][[design_name]][["input"]] <- 
+                            matrix(private$table[region == regions & design == design_name,]$value, 
+                            nrow=nbrow[regions], ncol=nbcol, byrow=TRUE)
+                }
+            }
+            return (matrices)
+        },
+        start_bm = function(msg) {
+            private$print_verbose(paste0(msg, "..."))
+            return(list(Message=msg, Time=Sys.time(), Memory=pryr::mem_used()))
+        },
+        stop_bm = function(bm_obj) {
+            bm_after_time = Sys.time()
+            bm_after_mem = pryr::mem_used()            
+            bm_time = difftime(bm_after_time, bm_obj$Time, unit="secs")
+            bm_mem = structure(bm_after_mem - bm_obj$Memory, class="bytes")
+            
+            private$print_verbose(paste0("BENCHMARK-TIME-", bm_obj$Message, ":", bm_time))
+            private$print_verbose(paste0("BENCHMARK-MEMORY-", bm_obj$Message, ":", bm_mem))        
         }
     )
 )
