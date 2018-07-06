@@ -211,11 +211,16 @@ metagene <- R6Class("metagene",
                                 cores = SerialParam(), verbose = FALSE,
                                 force_seqlevels = FALSE, paired_end = FALSE,
                                 assay = 'chipseq', strand_specific=FALSE,
-                                paired_end_strand_mode=2) {
+                                paired_end_strand_mode=2,
+                                region_mode="auto", region_metadata=NULL) {
 
             # Validate the format of bam_files, since it is used to preprocess certain
             # parameters before initialization.
             private$validate_bam_files_format(bam_files)
+            
+            if(region_mode=="auto") {
+                region_mode = ifelse(assay=='chipseq', "separate", "stitch")
+            }
             
             # Initialize parameter handler.
             private$ph <- parameter_manager$new(
@@ -237,7 +242,9 @@ metagene <- R6Class("metagene",
                     flip_regions=FALSE,
                     alpha=0.05,
                     sample_count=1000,
-                    bam_name=NULL),
+                    bam_name=NULL,
+                    region_mode=region_mode,
+                    split_by="region"),
                 param_validations=list(
                     design=private$validate_design,
                     bam_files=private$validate_bam_files,
@@ -255,7 +262,8 @@ metagene <- R6Class("metagene",
                     bin_count=private$validate_bin_count,
                     flip_regions=private$validate_flip_regions,
                     alpha=private$validate_alpha,
-                    sample_count=private$validate_sample_count),
+                    sample_count=private$validate_sample_count,
+                    region_mode=private$validate_region_mode),
                 overall_validation=private$validate_combination)
                 
             # Prepare objects for parralel processing.
@@ -272,7 +280,7 @@ metagene <- R6Class("metagene",
 
             # Prepare regions
             private$print_verbose("Prepare regions...")
-            private$regions <- private$prepare_regions(regions, private$ph$get("assay"))
+            private$regions <- private$prepare_regions(regions, private$ph$get("region_mode"), region_metadata)
 
             # Parse bam files
             bm = private$start_bm("Calculating coverages")
@@ -289,14 +297,11 @@ metagene <- R6Class("metagene",
         get_design = function() {
             private$ph$get("design")
         },
-        get_regions = function(region_names = NULL) {
-            if (is.null(region_names)) {
-                private$regions
+        get_regions = function(split_by="region") {
+            if(private$ph$get("assay") == 'rnaseq') {
+                return(private$regions)
             } else {
-                new_names <- tools::file_path_sans_ext(basename(region_names))
-                region_names <- new_names
-                stopifnot(all(region_names %in% names(private$regions)))
-                private$regions[region_names]
+                return(private$split_regions(private$regions, private$region_metadata, split_by))
             }
         },
         get_table = function() {
@@ -321,7 +326,7 @@ metagene <- R6Class("metagene",
             assay = private$ph$get("assay")
             if (assay == 'chipseq') {
                 return(private$matrices_from_table(self$get_table(),
-                                                   self$get_regions(), 
+                                                   self$get_regions(split_by=private$ph$get("split_by")), 
                                                    self$get_design(), 
                                                    private$ph$get("bin_count")))
             } else {
@@ -340,7 +345,7 @@ metagene <- R6Class("metagene",
                     stopifnot(is.character(region_names))
                     stopifnot(all(region_names %in% unique(private$table$region)))
                 } else {
-                    region_names <- names(private$regions)
+                    region_names <- unique(private$table$region)
                 }
                 if (!is.null(design_names)) {
                     stopifnot(is.character(design_names))
@@ -412,7 +417,7 @@ metagene <- R6Class("metagene",
         },
         produce_table = function(design = NA, bin_count = NA, bin_size = NULL,
                                 noise_removal = NA, normalization = NA,
-                                flip_regions = FALSE) {
+                                flip_regions = FALSE, split_regions_by="region") {
             if (!is.null(bin_size)) {
                 warning("bin_size is now deprecated. Please use bin_count.")
             }
@@ -420,7 +425,7 @@ metagene <- R6Class("metagene",
             private$validate_flip_regions(flip_regions)
             design = private$clean_design(design, private$ph$get("bam_files"))
             
-            if(private$ph$update_params(design, bin_count, noise_removal, normalization)) {
+            if(private$ph$update_params(design, bin_count, noise_removal, normalization, split_by=split_regions_by)) {
                 private$table = NULL
             }
             
@@ -440,7 +445,7 @@ metagene <- R6Class("metagene",
                     table_list[[strand_name]] = private$produce_strand_table(coverages[[strand_name]],
                                                                              private$ph$get("assay"), 
                                                                              private$ph$get("design"), 
-                                                                             self$get_regions(), 
+                                                                             self$get_regions(split_by=split_regions_by), 
                                                                              private$ph$get("noise_removal"), 
                                                                              private$ph$get("bin_count"))
                 }
@@ -490,7 +495,8 @@ metagene <- R6Class("metagene",
                     alpha=alpha, sample_count=sample_count, avoid_gaps=avoid_gaps, 
                     gaps_threshold=gaps_threshold, bam_name=bam_name,
                     assay=private$ph$get('assay'), input_design=self$get_design(),  
-                    input_regions=self$get_regions(), bin_count=private$ph$get('bin_count'))
+                    input_regions=self$get_regions(split_by=private$ph$get("split_by")),
+                    bin_count=private$ph$get('bin_count'))
                 private$stop_bm(bm)
                     
                 invisible(self)
@@ -520,17 +526,18 @@ metagene <- R6Class("metagene",
             invisible(self)
         },
         export = function(bam_file, region, file) {
-            region <- tools::file_path_sans_ext(basename(region))
-            region <- private$regions[[region]]
-            param <- Rsamtools::ScanBamParam(which = region)
-            alignments <- GenomicAlignments::readGAlignments(bam_file,
-                                                                param = param)
-            weight <- 1 - private$bam_handler$get_rpm_coefficient(bam_file)
-            seqlevels(alignments) <- seqlevels(region)
-            # TODO: don't use the weight param of coverage
-            coverage <- GenomicAlignments::coverage(alignments, weight=weight)
-            rtracklayer::export(coverage, file, "BED")
-            invisible(coverage)
+            # TODO: Deprecate?
+            warning("export is deprecated")
+            # region <- private$regions[[region]]
+            # param <- Rsamtools::ScanBamParam(which = region)
+            # alignments <- GenomicAlignments::readGAlignments(bam_file,
+            #                                                     param = param)
+            # weight <- 1 - private$bam_handler$get_rpm_coefficient(bam_file)
+            # seqlevels(alignments) <- seqlevels(region)
+            # # TODO: don't use the weight param of coverage
+            # coverage <- GenomicAlignments::coverage(alignments, weight=weight)
+            # rtracklayer::export(get_normalized_coverages()[bam_file], file, "BED")
+            # invisible(coverage)
         },
         flip_regions = function() {
             if (!private$ph$get("flip_regions")) {
@@ -550,6 +557,7 @@ metagene <- R6Class("metagene",
     private = list(
         params = list(),
         regions = GRangesList(),
+        region_metadata = NULL,
         table = NULL,
         design = data.frame(),
         coverages = list(),
@@ -569,8 +577,8 @@ metagene <- R6Class("metagene",
                 cat(paste0(to_print, "\n"))
             }
         },
-        get_subtable = function(coverages, region, bcount) {
-            gr <- private$regions[[region]]
+        get_subtable = function(coverages, region, bcount, all_regions) {
+            gr <- all_regions[[region]]
             grl <- split(gr, GenomeInfoDb::seqnames(gr))
             i <- vapply(grl, length, numeric(1)) > 0
             do.call("c", lapply(grl[i], private$get_view_means,
@@ -583,7 +591,7 @@ metagene <- R6Class("metagene",
             views <- Views(cov[[chr]], start(gr), end(gr))
             viewMeans(views)
         },
-        prepare_regions = function(regions, assay) {
+        prepare_regions = function(regions, region_mode, region_metadata) {
             if (class(regions) == "character") {
                 # Validation specific to regions as a vector
                 if (!all(sapply(regions, file.exists))) {
@@ -591,7 +599,16 @@ metagene <- R6Class("metagene",
                 }
                 regions = private$import_regions_from_disk(regions)
             } else if (class(regions) == "GRanges") {
-                regions <- GRangesList("regions" = regions)
+                if(region_mode=="stitch") {
+                    if(length(unique(seqnames(regions))) > 1) {
+                        stop(paste0("In stitch region_mode, such as in rnaseq assays, regions should be a ",
+                                    "GRangesList of transcripts, or a GRanges ",
+                                    " object representing a single transcript. ",
+                                    "Here regions spans several seqnames, indicating ",
+                                    "it might include many transcripts."))
+                    }
+                }
+                regions <- GRangesList("regions" = regions)                
             } else if (class(regions) == "list") {
                 regions <- GRangesList(regions)
             } else if (!is(regions, "GRangesList")) {
@@ -599,41 +616,60 @@ metagene <- R6Class("metagene",
                             "filenames, a GRanges object or a GrangesList object"))            
             }
             
+            # If regions do not have names, generate generic names for them.
             if (is.null(names(regions))) {
-                names(regions) <- sapply(seq_along(regions), function(x) {
-                    paste("region", x, sep = "_")
-                    })        
+                names(regions) <- paste0("region_", seq_along(regions))
             }
             
-            if(assay=="rnaseq" && is(regions, "GRanges")) {
-                if(length(unique(seqnames(regions))) > 1) {
-                    stop(paste0("For rnaseq assays, regions should be a ",
-                                "GRangesList of transcripts, or a GRanges ",
-                                " object representing a single transcript. ",
-                                "Here regions spans several seqnames, indicating ",
-                                "it might include many transcripts."))
+            # In stitch mode, make sure disjoint regions part of the same
+            # group do not overlap each other.
+            if (region_mode=="stitch"){
+                # If some "exons" overlap, then the total size will be smaller than the reduced size.
+                total_size = sum(width(private$regions))
+                reduced_size = sum(width(GenomicRanges::reduce(private$regions)))
+                if(!all(total_size==reduced_size)) {
+                    stop("In stitch region_mode, no overlap should exist between the individual ",
+                         "GRanges making up the elements of the GRangesList")
                 }
-            }
-
-            
-            if (private$ph$get('assay') == "rnaseq"){
-                stopifnot(all(sum(width(GenomicRanges::reduce(private$regions)))
-                            == sum(width(private$regions))))
             }
             # TODO: Check if there is a id column in the mcols of every ranges.
             #    If not, add one by merging seqnames, start and end.
 
-            GRangesList(lapply(regions, function(x) {
-                # Add padding
-                padding_size = private$ph$get("padding_size")
-                start(x) <- start(x) - padding_size
-                start(x)[start(x) < 0] <- 1
+            # Apply padding and sortSeqLevels
+            pad_regions = function(x, padding_size) {
+                start(x) <- pmax(start(x) - padding_size, 1)
                 end(x) <- end(x) + padding_size
                 # Clean seqlevels
                 x <- sortSeqlevels(x)
-                #seqlevels(x) <- unique(as.character(seqnames(x)))
                 x
-            }))
+            }
+            regions = GRangesList(lapply(regions, pad_regions, padding_size = private$ph$get("padding_size")))
+            
+            # Add a region column to all GRangesList elements.
+            regions_with_extra_col = list()
+            for(region_name in names(regions)) {
+                #mcols(regions[[region_name]])$region = region_name
+                regions_with_extra_col[[region_name]] = regions[[region_name]]
+                mcols(regions_with_extra_col[[region_name]])$region = region_name
+            }
+            regions = GRangesList(regions_with_extra_col)
+            
+            # In separate mode, simplify regions into a single GRanges object.
+            if(region_mode=="separate") {
+                regions = unlist(regions, use.names=FALSE)
+                private$region_metadata = mcols(regions)
+            } else {
+                first_or_null = function(x) {
+                    if(length(x)>0) {
+                        return(mcols(x)[1,])
+                    } else {
+                        return(NULL)
+                    }
+                }
+                private$region_metadata = do.call(rbind, lapply(regions_gr, first_or_null))
+            }
+            
+            return(regions)
         },
         produce_coverages = function() {
             regions <- GenomicRanges::reduce(BiocGenerics::unlist(private$regions))
@@ -1087,7 +1123,7 @@ metagene <- R6Class("metagene",
                         
             ## col_values
             #NB : lapply(Views...) -> out of limits of view
-            grtot <- self$get_regions()
+            grtot <- regions
             col_values <- list()
             idx <- 1 #index for col_values list
             idx_sd_loop <- 1 
@@ -1183,7 +1219,7 @@ metagene <- R6Class("metagene",
                                 stringsAsFactors = FALSE)
             col_values <- map2(pairs$Var1, pairs$Var2,
                 ~ private$get_subtable(coverages[[.x]], .y, 
-                    bin_count)) %>% unlist
+                    bin_count, regions)) %>% unlist
             
             #TODO : improve col_strand production
             # Vectorize? Slower than loop with small data set.
@@ -1289,6 +1325,7 @@ metagene <- R6Class("metagene",
                 results <- private$matrix_resampling(input_table, input_regions, input_design, sample_count, bin_count, alpha)
                 
                 results <- as.data.frame(results)
+                browser()
                 results$group <- as.factor(paste(results$design, results$region, sep="_"))
                 
                 return(results)            
@@ -1554,6 +1591,11 @@ metagene <- R6Class("metagene",
                 stop("bin_count cannot be NULL in chipseq assays.")
             }
         },
+        validate_region_mode = function(region_mode) {
+            if(!(region_mode %in% c("auto", "separate", "stitch"))) {
+                stop("region_mode must be 'auto', 'separate' or 'stitch'")
+            }
+        },        
         get_complete_design = function(bam_files) {
             bam_files = private$name_from_path(bam_files)
             
@@ -1728,6 +1770,40 @@ metagene <- R6Class("metagene",
             }
         
             return(results)
+        },
+        split_regions = function(regions, region_metadata, split_by) {
+            # Determine all possible values for the split_by columns.
+            split_by_list = as.list(split_by)
+            names(split_by_list) = split_by
+            possible_values = lapply(split_by_list, function(x) {unique(region_metadata[[x]])})
+            
+            # Determine all possible combinations of the split_by column values.
+            combinations = expand.grid(possible_values)
+            
+            # Split regions by iterating over value combinations.
+            out_regions=list()
+            for(i in 1:nrow(combinations)) {
+                # Select the columns where all values match the current combination.
+                selected_subset = TRUE
+                for(j in 1:ncol(combinations)) {
+                    col_name = colnames(combinations)[j]
+                    col_value = combinations[i,j]
+                    selected_subset = selected_subset & (mcols(regions)[[col_name]] == col_value)
+                }
+                
+                # If at least oen region is selected, generate a name and assign it.
+                if(sum(selected_subset) > 0) {
+                    region_name = paste(combinations[i,], collapse=";")
+                    out_regions[[region_name]] = regions[selected_subset]
+                    
+                    # We'll store the combination values in an attribute for later use.
+                    attr(out_regions[[region_name]], "split_by") = combinations[i,]
+                }
+            }
+            
+            # Convert to a GRangesList and return the results.
+            out_regions = GRangesList(out_regions)
+            return(out_regions)        
         }
     )
 )
