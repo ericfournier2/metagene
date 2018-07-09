@@ -23,8 +23,11 @@ plot_metagene <- function(df) {
         expected_cols <- c("bin", "value", "qinf", "qsup", "group")
         df<-df[,which(colnames(df) %in% expected_cols)]
         expected_class <- c("integer", rep("numeric", 3), "factor")
+        names(expected_class) = expected_cols
         stopifnot(all(expected_cols %in% colnames(df)))
-        stopifnot(all(vapply(df, class, character(1)) == expected_class))
+        actual_classes = vapply(df, class, character(1))
+        actual_classes = actual_classes[expected_cols]
+        stopifnot(all(actual_classes == expected_class))
 
         ggplot(df, aes(x=bin, y=value, ymin=qinf, ymax=qsup)) +
             geom_ribbon(aes(fill=group), alpha=0.3) +
