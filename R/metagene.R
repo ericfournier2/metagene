@@ -520,7 +520,7 @@ metagene <- R6Class("metagene",
             }
         },
         plot = function(region_names = NULL, design_names = NULL, title = NULL,
-                        x_label = NULL) {
+                        x_label = NULL, facet_by=NULL, group_by=NULL) {
             # 1. Get the correctly formatted table
             if (length(private$table) == 0) {
                 self$produce_table()
@@ -537,7 +537,7 @@ metagene <- R6Class("metagene",
                 title <- paste(unique(private$df[["group"]]), collapse=" vs ")
             }
             p <- private$plot_graphic(df = df, title = title, 
-                                        x_label = x_label)
+                                        x_label = x_label, facet_by=facet_by, group_by=group_by)
             print(p)
             private$graph <- p
             invisible(self)
@@ -728,7 +728,7 @@ metagene <- R6Class("metagene",
             
             lapply(res, sortseq_or_null)
         },
-        plot_graphic = function(df, title, x_label) {
+        plot_graphic = function(df, title, x_label, facet_by, group_by) {
             # Prepare x label
             assay = private$ph$get("assay")
             if (is.null(x_label)) {
@@ -750,7 +750,7 @@ metagene <- R6Class("metagene",
             }
             
             # Produce plot
-            p <- plot_metagene(df) +
+            p <- plot_metagene(df, facet_by=facet_by, group_by=group_by) +
                 ylab(y_label) +
                 xlab(x_label) +
                 ggtitle(title)

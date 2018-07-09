@@ -13,7 +13,7 @@
 #' mg$produce_data_frame()
 #' df <- mg$get_data_frame()
 #' p <- plot_metagene(df)
-plot_metagene <- function(df) {
+plot_metagene <- function(df, facet_by=NULL, group_by=NULL) {
     df$design <- as.factor(df$design)
 
     if (('bin' %in% colnames(df)) & !('nuc' %in% colnames(df))) { 
@@ -21,22 +21,32 @@ plot_metagene <- function(df) {
         message('Plot : ChIP-Seq')
         
         expected_cols <- c("bin", "value", "qinf", "qsup", "group")
-        df<-df[,which(colnames(df) %in% expected_cols)]
+        assert_subset<-df[,which(colnames(df) %in% expected_cols)]
         expected_class <- c("integer", rep("numeric", 3), "factor")
         names(expected_class) = expected_cols
-        stopifnot(all(expected_cols %in% colnames(df)))
-        actual_classes = vapply(df, class, character(1))
+        stopifnot(all(expected_cols %in% colnames(assert_subset)))
+        actual_classes = vapply(assert_subset, class, character(1))
         actual_classes = actual_classes[expected_cols]
         stopifnot(all(actual_classes == expected_class))
 
-        ggplot(df, aes(x=bin, y=value, ymin=qinf, ymax=qsup)) +
-            geom_ribbon(aes(fill=group), alpha=0.3) +
-            geom_line(aes(color=group), size=1) +
+        if(is.null(group_by)) {
+            group_by="group"
+        }
+        
+        p <- ggplot(df, aes(x=bin, y=value, ymin=qinf, ymax=qsup)) +
+            geom_ribbon(aes_string(fill=group_by), alpha=0.3) +
+            geom_line(aes_string(color=group_by), size=1) +
             theme(panel.grid.major = element_line()) +
             theme(panel.grid.minor = element_line()) +
             theme(panel.background = element_blank()) +
             theme(panel.background = element_rect()) +
             theme_bw(base_size = 20)
+            
+        if(!is.null(facet_by)) {
+            p <- p + facet_grid(facet_by)
+        }
+        
+        return(p)
             
     } else if (('nuc' %in% colnames(df)) & !('bin' %in% colnames(df))) { 
         #message(paste('Please, notice that strand orientation by gene',
