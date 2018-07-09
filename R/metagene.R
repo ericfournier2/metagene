@@ -326,7 +326,8 @@ metagene <- R6Class("metagene",
             assay = private$ph$get("assay")
             if (assay == 'chipseq') {
                 return(private$matrices_from_table(self$get_table(),
-                                                   self$get_regions(split_by=private$ph$get("split_by")), 
+                                                   #self$get_regions(split_by=private$ph$get("split_by")), 
+                                                   private$split_regions_cache,
                                                    self$get_design(), 
                                                    private$ph$get("bin_count")))
             } else {
@@ -417,7 +418,7 @@ metagene <- R6Class("metagene",
         },
         produce_table = function(design = NA, bin_count = NA, bin_size = NULL,
                                 noise_removal = NA, normalization = NA,
-                                flip_regions = FALSE, split_regions_by="region") {
+                                flip_regions = FALSE, split_regions_by="region", design_metadata=NULL) {
             if (!is.null(bin_size)) {
                 warning("bin_size is now deprecated. Please use bin_count.")
             }
@@ -425,11 +426,23 @@ metagene <- R6Class("metagene",
             private$validate_flip_regions(flip_regions)
             design = private$clean_design(design, private$ph$get("bam_files"))
             
-            if(private$ph$update_params(design, bin_count, noise_removal, normalization, split_by=split_regions_by)) {
-                private$table = NULL
+            if(is.null(design_metadata)) {
+                design_metadata = data.frame(design=private$get_design_names(design))
             }
             
-            if (is.null(private$table)) {            
+            if(private$ph$update_params(design, bin_count, noise_removal, normalization, split_by=split_regions_by)) {
+                private$table = NULL
+                private$split_regions_cache=NULL
+                private$split_metadata_cache=NULL
+            }
+            
+            if (is.null(private$table)) {    
+                # Split regions.
+                split_res = private$split_regions(private$regions, private$region_metadata, split_by=split_regions_by)
+                private$split_regions_cache=split_res$regions
+                private$split_metadata_cache=split_res$metadata
+                private$design_metadata_cache=design_metadata
+            
                 # Normalize if necessary.
                 if (!is.null(private$ph$get("normalization"))) {
                     bm = private$start_bm("Normalizing coverages")
@@ -445,7 +458,8 @@ metagene <- R6Class("metagene",
                     table_list[[strand_name]] = private$produce_strand_table(coverages[[strand_name]],
                                                                              private$ph$get("assay"), 
                                                                              private$ph$get("design"), 
-                                                                             self$get_regions(split_by=split_regions_by), 
+                                                                             #self$get_regions(split_by=split_regions_by), 
+                                                                             private$split_regions_cache,
                                                                              private$ph$get("noise_removal"), 
                                                                              private$ph$get("bin_count"))
                 }
@@ -495,7 +509,10 @@ metagene <- R6Class("metagene",
                     alpha=alpha, sample_count=sample_count, avoid_gaps=avoid_gaps, 
                     gaps_threshold=gaps_threshold, bam_name=bam_name,
                     assay=private$ph$get('assay'), input_design=self$get_design(),  
-                    input_regions=self$get_regions(split_by=private$ph$get("split_by")),
+                    #input_regions=self$get_regions(split_by=private$ph$get("split_by")),
+                    input_regions=private$split_regions_cache,
+                    region_metadata=private$split_metadata_cache,
+                    design_metadata=private$design_metadata_cache,
                     bin_count=private$ph$get('bin_count'))
                 private$stop_bm(bm)
                     
@@ -558,8 +575,11 @@ metagene <- R6Class("metagene",
         params = list(),
         regions = GRangesList(),
         region_metadata = NULL,
+        split_regions_cache = NULL,
+        split_metadata_cache = NULL,
         table = NULL,
         design = data.frame(),
+        design_metadata_cache=NULL,
         coverages = list(),
         design_coverages = list(),
         df = data.frame(),
@@ -1254,7 +1274,7 @@ metagene <- R6Class("metagene",
         },
         produce_data_frame_internal = function(input_table, alpha, sample_count,
                             avoid_gaps, gaps_threshold, bam_name,
-                            assay, input_design, input_regions, bin_count) {
+                            assay, input_design, input_regions, region_metadata, design_metadata, bin_count) {
             if(assay =='rnaseq') {
                 if(!is.null(bin_count)) {
                     sample_size_columns = quote(.(region, design))
@@ -1325,9 +1345,10 @@ metagene <- R6Class("metagene",
                 results <- private$matrix_resampling(input_table, input_regions, input_design, sample_count, bin_count, alpha)
                 
                 results <- as.data.frame(results)
-                browser()
+                #browser()
                 results$group <- as.factor(paste(results$design, results$region, sep="_"))
-                
+                results = dplyr::left_join(results, region_metadata, by=c(region="split_regions"))      
+                results = dplyr::left_join(results, design_metadata, by=c(design="design"))      
                 return(results)            
             }
         },
@@ -1779,9 +1800,10 @@ metagene <- R6Class("metagene",
             
             # Determine all possible combinations of the split_by column values.
             combinations = expand.grid(possible_values)
-            
+
             # Split regions by iterating over value combinations.
             out_regions=list()
+            new_metadata_list = list()
             for(i in 1:nrow(combinations)) {
                 # Select the columns where all values match the current combination.
                 selected_subset = TRUE
@@ -1796,14 +1818,16 @@ metagene <- R6Class("metagene",
                     region_name = paste(combinations[i,], collapse=";")
                     out_regions[[region_name]] = regions[selected_subset]
                     
-                    # We'll store the combination values in an attribute for later use.
-                    attr(out_regions[[region_name]], "split_by") = combinations[i,]
+                    # We'll store the combination values for later use.
+                    new_metadata_list[[region_name]] = combinations[i,]
                 }
             }
             
             # Convert to a GRangesList and return the results.
             out_regions = GRangesList(out_regions)
-            return(out_regions)        
+            new_metadata=data.table::rbindlist(new_metadata_list, use.names=TRUE)
+            new_metadata$split_regions = names(new_metadata_list)
+            return(list(regions=out_regions, metadata=new_metadata))        
         }
     )
 )
