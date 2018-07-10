@@ -1457,6 +1457,17 @@ metagene <- R6Class("metagene",
             }
             coverages
         },
+        get_coverages_internal = function() {
+            if (!is.null(private$ph$get("normalization"))) {
+                bm = private$start_bm("Normalizing coverages")
+                coverages <- private$get_normalized_coverages_internal()    
+                private$stop_bm(bm)
+            } else {
+                coverages <- private$get_raw_coverages_internal()
+            }
+            
+            return(coverages)
+        },
         produce_strand_table = function(coverages_s, assay, design, regions, noise_removal, bin_count) {
             if(is.null(coverages_s)) {
                 return(NULL)
@@ -1830,4 +1841,10 @@ metagene <- R6Class("metagene",
             return(list(regions=out_regions, metadata=new_metadata))        
         }
     )
+    bin_coverages = function(bin_count) {
+        all_coverages = self$get_coverages_internal()
+        regions = self$get_regions()
+
+        bin_coverages(all_coverages, regions, bin_count)
+    }
 )
