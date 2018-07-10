@@ -1839,12 +1839,34 @@ metagene <- R6Class("metagene",
             new_metadata=data.table::rbindlist(new_metadata_list, use.names=TRUE)
             new_metadata$split_regions = names(new_metadata_list)
             return(list(regions=out_regions, metadata=new_metadata))        
+        },
+        bin_coverages = function(bin_count) {
+            all_coverages = self$get_coverages_internal()
+            regions = self$get_regions()
+
+            results = list()
+            for(cov_strand in names(all_coverages)) {
+                if(is.null(all_coverages[[cov_strand]])) {
+                    results[[cov_strand]] = NULL
+                } else {
+                    coverage_s = all_coverages[[cov_strand]]
+                    if (!is.null(noise_removal)) {
+                        bm = private$start_bm("Removing controls")
+                        coverage_s <- private$remove_controls(coverage_s, design)
+                        private$stop_bm(bm)
+                    } else {
+                        bm = private$start_bm("Merging coverages")
+                        coverage_s <- private$merge_chip(coverage_s, design)
+                        private$stop_bm(bm)
+                    }
+                    
+                    private$start_bm("Binning coverages")
+                    results[[cov_strand]] = bin_coverages(coverage_s, regions, bin_count)                
+                    private$stop_bm(bm)
+                }
+            }
+            
+            return(results)
         }
     )
-    bin_coverages = function(bin_count) {
-        all_coverages = self$get_coverages_internal()
-        regions = self$get_regions()
-
-        bin_coverages(all_coverages, regions, bin_count)
-    }
 )
