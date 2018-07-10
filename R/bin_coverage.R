@@ -162,3 +162,63 @@ merge_reduce = function(coverages, design, design_name, design_value) {
     list(Coverage=Reduce("+", coverages[bam_names]),
          BamNames=bam_names)
 }
+
+split_matrix = function(input_matrix, split_indices) {
+    lapply(split_indices, function(indices) { input_matrix[indices] })
+}
+
+split_matrices_s = function(matrices, split_indices) {
+    if(is.null(matrices)) {
+        return(NULL)
+    } else {
+        return(lapply(matrices, split_matrix, split_indices=split_indices))
+    }
+}
+
+split_matrices = function(matrices, metadata, split_by) {
+    split_indices = split_by_metadata(metadata, split_by)
+    
+    res_matrices = lapply(matrices, split_matrices_s, split_indices=split_indices$Indices)
+    return(list(Matrices=res_matrix, Metadata=split_indices$Metadata)))
+}
+
+split_by_metadata = function(metadata, split_by) {
+    # Determine all possible values for the split_by columns.
+    split_by_list = as.list(split_by)
+    names(split_by_list) = split_by
+    possible_values = lapply(split_by_list, function(x) {unique(metadata[[x]])})
+    
+    # Determine all possible combinations of the split_by column values.
+    combinations = expand.grid(possible_values)
+
+    # Split rows by iterating over value combinations.
+    out_subsets=list()
+    new_metadata_list = list()
+    partition = rep(NA, nrow(metadata))
+    for(i in 1:nrow(combinations)) {
+        # Select the columns where all values match the current combination.
+        selected_subset = TRUE
+        for(j in 1:ncol(combinations)) {
+            col_name = colnames(combinations)[j]
+            col_value = combinations[i,j]
+            selected_subset = selected_subset & (metadata[[col_name]] == col_value)
+        }
+        
+        # If at least one row is selected, generate a name and assign it.
+        if(sum(selected_subset) > 0) {
+            region_name = paste(combinations[i,], collapse=";")
+            out_subsets[[region_name]] = selected_subset
+            partition[selected_subset] = i
+            
+            # We'll store the combination values for later use.
+            new_metadata_list[[region_name]] = combinations[i,]
+        }
+    }
+    
+    # Concatenate the new metadata.
+    new_metadata=data.table::rbindlist(new_metadata_list, use.names=TRUE)
+    new_metadata$split_regions = names(new_metadata_list)
+
+    # Return the results.
+    return(list(Indices=out_subsets, Metadata=new_metadata, Partition=partition))        
+}
