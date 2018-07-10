@@ -569,7 +569,48 @@ metagene <- R6Class("metagene",
                 private$ph$set("flip_regions", FALSE)
             }
             invisible(self)
-        }
+        },
+        group_coverages = function(design=NA, normalization=NA, noise_removal=NA) {
+            # Clean up the design so it'll have the expected format.
+            design = private$clean_design(design, private$ph$get("bam_files"))
+            
+            if(private$ph$update_params(design, normalization, noise_removal)) {
+                private$grouped_coverages = NULL
+            }
+
+            bm <- private$start_bm("Grouping and normalizing coverages")
+            if(is.null(private$grouped_coverages)) {
+                private$grouped_coverages = lapply(private$get_coverages_internal(),
+                                                   group_coverages_s,
+                                                   private$ph$get("design"),
+                                                   private$ph$get("noise_removal"),
+                                                   private$bam_handler)
+            }
+            private$stop_bm(bm)
+            
+            private$grouped_coverages
+        },
+        bin_coverages = function(bin_count=NA) {
+            # Make sure the previous step has been performed.
+            if(is.null(private$grouped_coverages)) {
+                self$group_coverages()
+            }
+        
+            if(private$ph$update_params(bin_count)) {
+                private$binned_coverages = NULL
+            }
+            
+            if(is.null(private$binned_coverages)) {
+                bm = private$start_bm("Binning coverages")
+                private$binned_coverages = lapply(private$grouped_coverages,
+                                                  bin_coverages_s, 
+                                                  regions=private$regions,
+                                                  bin_count=private$ph$get("bin_count"))
+                private$stop_bm(bm)
+            }
+           
+            return(private$binned_coverages)
+        }        
     ),
     private = list(
         params = list(),
@@ -582,6 +623,8 @@ metagene <- R6Class("metagene",
         design_metadata_cache=NULL,
         coverages = list(),
         design_coverages = list(),
+        grouped_coverages = NULL,
+        binned_coverages = NULL,
         df = data.frame(),
         graph = "",
         bam_handler = "",
@@ -755,47 +798,6 @@ metagene <- R6Class("metagene",
                 xlab(x_label) +
                 ggtitle(title)
             p
-        },
-        remove_controls = function(coverages, design) {
-            results <- list()
-            for (design_name in colnames(design)[-1]) {
-                # Add up coverage for all ChIP and all input bams.
-                chip_results <- private$merge_reduce(coverages, design, design_name, 1)
-                input_results <- private$merge_reduce(coverages, design, design_name, 2)
-                
-                
-                if (length(input_results$BamNames) > 0) {
-                    # If we had input bams, perform noise reduction.
-                    noise_ratio <-
-                        private$bam_handler$get_noise_ratio(chip_results$BamNames,
-                                                            input_results$BamNames)
-                    results[design_name] <- chip_results$Coverage - (input_results$Coverage * noise_ratio)
-                    
-                    # When input signal is stronger than the chip's, we'll get
-                    # negative values. Set the value floor to 0.
-                    i <- results[[design_name]] < 0
-                    results[[design_name]][i] <- 0
-                } else {
-                    # If we had no input bams, return coverage as-is.
-                    results[design_name] <- chip_results$Coverage
-                }
-            }
-            results
-        },
-        merge_chip = function(coverages, design) {
-            result <- list()
-            for (design_name in colnames(design)[-1]) {
-                result[[design_name]] <- private$merge_reduce(coverages, design, design_name, 1)$Coverage
-            }
-            result
-        },
-        merge_reduce = function(coverages, design, design_name, design_value) {
-            indices = design[[design_name]] == design_value
-            bam_files <- as.character(design[,1][indices])
-            bam_names <- private$get_bam_names(bam_files)
-            
-            list(Coverage=Reduce("+", coverages[bam_names]),
-                 BamNames=bam_names)
         },
         flip_table = function() {
             assay = private$ph$get('assay')
@@ -1839,34 +1841,6 @@ metagene <- R6Class("metagene",
             new_metadata=data.table::rbindlist(new_metadata_list, use.names=TRUE)
             new_metadata$split_regions = names(new_metadata_list)
             return(list(regions=out_regions, metadata=new_metadata))        
-        },
-        bin_coverages = function(bin_count) {
-            all_coverages = self$get_coverages_internal()
-            regions = self$get_regions()
-
-            results = list()
-            for(cov_strand in names(all_coverages)) {
-                if(is.null(all_coverages[[cov_strand]])) {
-                    results[[cov_strand]] = NULL
-                } else {
-                    coverage_s = all_coverages[[cov_strand]]
-                    if (!is.null(noise_removal)) {
-                        bm = private$start_bm("Removing controls")
-                        coverage_s <- private$remove_controls(coverage_s, design)
-                        private$stop_bm(bm)
-                    } else {
-                        bm = private$start_bm("Merging coverages")
-                        coverage_s <- private$merge_chip(coverage_s, design)
-                        private$stop_bm(bm)
-                    }
-                    
-                    private$start_bm("Binning coverages")
-                    results[[cov_strand]] = bin_coverages(coverage_s, regions, bin_count)                
-                    private$stop_bm(bm)
-                }
-            }
-            
-            return(results)
         }
     )
 )
