@@ -200,24 +200,24 @@ metagene <- R6Class("metagene",
                     split_by="region"),
                 param_validations=list(
                     design=private$validate_design,
-                    bam_files=private$validate_bam_files,
-                    padding_size=private$validate_padding_size,
-                    verbose=private$validate_verbose,
-                    force_seqlevels=private$validate_force_seqlevels,
-                    paired_end=private$validate_paired_end,
-                    assay=private$validate_assay,
-                    strand_specific=private$validate_strand_specific,
-                    paired_end_strand_mode=private$validate_paired_end_strand_mode,
-                    normalization=private$validate_normalization,
-                    noise_removal=private$validate_noise_removal,
-                    avoid_gaps=private$validate_avoid_gaps,
-                    gaps_threshold=private$validate_gaps_threshold,
-                    bin_count=private$validate_bin_count,
-                    flip_regions=private$validate_flip_regions,
-                    alpha=private$validate_alpha,
-                    sample_count=private$validate_sample_count,
-                    region_mode=private$validate_region_mode),
-                overall_validation=private$validate_combination)
+                    bam_files=validate_bam_files,
+                    padding_size=validate_padding_size,
+                    verbose=validate_verbose,
+                    force_seqlevels=validate_force_seqlevels,
+                    paired_end=validate_paired_end,
+                    assay=validate_assay,
+                    strand_specific=validate_strand_specific,
+                    paired_end_strand_mode=validate_paired_end_strand_mode,
+                    normalization=validate_normalization,
+                    noise_removal=validate_noise_removal,
+                    avoid_gaps=validate_avoid_gaps,
+                    gaps_threshold=validate_gaps_threshold,
+                    bin_count=validate_bin_count,
+                    flip_regions=validate_flip_regions,
+                    alpha=validate_alpha,
+                    sample_count=validate_sample_count,
+                    region_mode=validate_region_mode),
+                overall_validation=validate_combination)
                 
             # Prepare objects for parralel processing.
             private$validate_cores(cores)
@@ -784,136 +784,21 @@ metagene <- R6Class("metagene",
             return(coverages)
         },
         validate_design = function(design) {
-            private$validate_design_format(design)
-            private$validate_design_values(design)
-        },
-        validate_design_format = function(design) {
-            if(!is.data.frame(design)) {
-                stop("design must be a data.frame object, NULL or NA")
-            }
-
-            # Validate that we have enough columns and that they are of the right types.
-            if(ncol(design) < 2) {
-                stop("design must have at least 2 columns")
-            }
-            if (!(is.character(design[,1]) || is.factor(design[,1]))) {
-                stop("The first column of design must be BAM filenames")
-            }
-            if (!all(apply(design[, -1, drop=FALSE], MARGIN=2, is.numeric))) {
-                stop(paste0("All design column, except the first one,",
-                                " must be in numeric format"))
-            }
+            validate_design_format(design)
+            validate_design_values(design)
         },
         validate_design_values = function(design) {
             # At least one file must be used in the design
             if (sum(rowSums(design[ , -1, drop=FALSE]) > 0) == 0) {
                 stop("At least one BAM file must be used in the design.")
             }
-
+        
             # Check if used bam files exist.
             non_empty_rows = rowSums(design[, -1, drop=FALSE]) > 0
             if (!all(purrr::map_lgl(design$Samples[non_empty_rows], private$check_bam_files))) {
                 warning("At least one BAM file does not exist")
             }
-        
-        },
-        validate_alpha = function(alpha) {
-            stopifnot(is.numeric(alpha))
-            stopifnot(alpha >= 0 & alpha <= 1)
-        },
-        validate_bin_count = function(bin_count) {
-            if (!is.null(bin_count)) {
-                if (!is.numeric(bin_count) || bin_count <= 0 || as.integer(bin_count) != bin_count) {
-                    stop("bin_count must be NULL or a positive integer")
-                }
-            }
-        },
-        validate_sample_count = function(sample_count) {
-            stopifnot(is.numeric(sample_count))
-            stopifnot(sample_count > 0)
-            stopifnot(as.integer(sample_count) == sample_count)
-        },
-        validate_avoid_gaps = function(avoid_gaps) {
-            stopifnot(is.logical(avoid_gaps))
-        },
-        validate_gaps_threshold = function(gaps_threshold) {
-            stopifnot(is.numeric(gaps_threshold))
-            stopifnot(gaps_threshold >= 0)
-        },
-        validate_noise_removal = function(noise_removal) {
-            if (!is.null(noise_removal) && !(noise_removal %in% c("NCIS"))) {
-                stop('noise_removal must be NA, NULL, or "NCIS".')
-            }
-        },
-        validate_normalization = function(normalization) {
-            if (!is.null(normalization) && normalization != "RPM") {
-                stop("normalization must be NA, NULL or \"RPM\".")
-            }
-        },
-        validate_flip_regions = function(flip_regions) {
-            if (!is.logical(flip_regions)) {
-                stop("flip_regions must be a logical.")
-            }
-        },
-        validate_assay = function(assay) {
-            # Check parameters validity
-            if (!is.character(assay)) {
-                stop("verbose must be a character value")
-            }
-            assayTypeAuthorized <- c('chipseq', 'rnaseq')
-            if (!(tolower(assay) %in% assayTypeAuthorized)) {
-                stop("assay values must be one of 'chipseq' or 'rnaseq'")
-            }
-        },
-        validate_verbose = function(verbose) {
-            if (!is.logical(verbose)) {
-                stop("verbose must be a logicial value (TRUE or FALSE)")
-            }       
-        },
-        validate_force_seqlevels = function(force_seqlevels) {
-            if (!is.logical(force_seqlevels)) {
-                stop(paste("force_seqlevels must be a logicial ",
-                            "value (TRUE or FALSE)",sep=""))
-            }        
-        },
-        validate_padding_size = function(padding_size) {
-            if (!(is.numeric(padding_size) || is.integer(padding_size)) ||
-                padding_size < 0 || as.integer(padding_size) != padding_size) {
-                stop("padding_size must be a non-negative integer")
-            }       
-        },
-        validate_cores = function(cores) {
-            isBiocParallel = is(cores, "BiocParallelParam")
-            isInteger = ((is.numeric(cores) || is.integer(cores)) &&
-                            cores > 0 && as.integer(cores) == cores)
-            if (!isBiocParallel && !isInteger) {
-                stop("cores must be a positive integer or a BiocParallelParam instance.")
-            }        
-        },
-        validate_bam_files = function(bam_files) {
-            private$validate_bam_files_format(bam_files)
-            private$validate_bam_files_values(bam_files)
-        },
-        validate_bam_files_format = function(bam_files) {
-            if (!is.vector(bam_files, "character")) {
-                stop("bam_files must be a vector of BAM filenames.")
-            }      
-        },
-        validate_bam_files_values = function(bam_files) {
-            if (!all(sapply(bam_files, file.exists))) {
-                stop("At least one BAM file does not exist.")
-            }        
-        },        
-        validate_combination = function(params) {
-            if(params$assay=="chipseq" && is.null(params$bin_count)) {
-                stop("bin_count cannot be NULL in chipseq assays.")
-            }
-        },
-        validate_region_mode = function(region_mode) {
-            if(!(region_mode %in% c("auto", "separate", "stitch"))) {
-                stop("region_mode must be 'auto', 'separate' or 'stitch'")
-            }
-        },        
+        }        
         get_complete_design = function(bam_files) {
             bam_files = private$name_from_path(bam_files)
             
