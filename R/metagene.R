@@ -203,7 +203,9 @@ metagene <- R6Class("metagene",
                     alpha=0.05,
                     sample_count=1000,
                     region_mode=region_mode,
-                    split_by="region"),
+                    split_by="region",
+                    region_filter=TRUE,
+                    design_filter=TRUE),
                 param_validations=list(
                     design=private$validate_design,
                     bam_files=validate_bam_files,
@@ -369,7 +371,7 @@ metagene <- R6Class("metagene",
             # rtracklayer::export(get_normalized_coverages()[bam_file], file, "BED")
             # invisible(coverage)
         },
-        group_coverages = function(design=NA, normalization=NA, noise_removal=NA) {
+        group_coverages = function(design=NA, normalization=NA, noise_removal=NA, design_filter=NA) {
             # Clean up the design so it'll have the expected format.
             design = private$clean_design(design, private$ph$get("bam_files"))
 
@@ -384,10 +386,12 @@ metagene <- R6Class("metagene",
             }
 
             bm <- private$start_bm("Grouping and normalizing coverages")
+            design_col_to_keep = rep_len(private$ph$get("design_filter"), ncol(private$ph$get("design")) - 1)
+            design_col_to_keep = 1 + which(design_col_to_keep)
             if(is.null(private$grouped_coverages)) {
                 private$grouped_coverages = lapply(private$get_coverages_internal(),
                                                    group_coverages_s,
-                                                   private$ph$get("design"),
+                                                   private$ph$get("design")[, c(1, design_col_to_keep)],
                                                    private$ph$get("noise_removal"),
                                                    private$bam_handler)
             }
@@ -395,20 +399,20 @@ metagene <- R6Class("metagene",
             
             invisible(private$grouped_coverages)
         },
-        bin_coverages = function(bin_count=NA) {
+        bin_coverages = function(bin_count=NA, region_filter=NA) {
             # Make sure the previous step has been performed.
             if(is.null(private$grouped_coverages)) {
                 self$group_coverages()
             }
         
-            if(private$ph$update_params(bin_count)) {
+            if(private$ph$update_params(bin_count, region_filter)) {
                 private$binned_coverages = NULL
             }
             
             if(is.null(private$binned_coverages)) {
                 bm = private$start_bm("Binning coverages")
                 private$binned_coverages = bin_coverages_s(private$grouped_coverages,
-                                                           regions=private$regions,
+                                                           regions=private$regions[private$ph$get("region_filter")],
                                                            bin_count=private$ph$get("bin_count"))
                 private$stop_bm(bm)
             }
@@ -491,8 +495,8 @@ metagene <- R6Class("metagene",
             # group do not overlap each other.
             if (region_mode=="stitch"){
                 # If some "exons" overlap, then the total size will be smaller than the reduced size.
-                total_size = sum(width(private$regions))
-                reduced_size = sum(width(GenomicRanges::reduce(private$regions)))
+                total_size = sum(width(regions))
+                reduced_size = sum(width(GenomicRanges::reduce(regions)))
                 if(!all(total_size==reduced_size)) {
                     stop("In stitch region_mode, no overlap should exist between the individual ",
                          "GRanges making up the elements of the GRangesList")
