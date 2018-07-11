@@ -166,7 +166,7 @@ metagene <- R6Class("metagene",
                                 force_seqlevels = FALSE, paired_end = FALSE,
                                 assay = 'chipseq', strand_specific=FALSE,
                                 paired_end_strand_mode=2,
-                                region_mode="auto", region_metadata=NULL) {
+                                region_mode="auto", region_metadata=NULL, ...) {
 
             # Validate the format of bam_files, since it is used to preprocess certain
             # parameters before initialization.
@@ -223,6 +223,12 @@ metagene <- R6Class("metagene",
                     sample_count=validate_sample_count,
                     region_mode=validate_region_mode),
                 overall_validation=validate_combination)
+                
+            # Update any other parameter passed as a ... argument.
+            # Since the parameter manager is locked, any non-existant
+            # parameter will cause an error.
+            extra_args = list(...)
+            private$ph$update_params(list(...))
                 
             # Prepare objects for parralel processing.
             validate_cores(cores)
@@ -355,8 +361,8 @@ metagene <- R6Class("metagene",
                 self$add_metadata()
             }
 
-            df <- self$get_data_frame(region_names = region_names,
-                                    design_names = design_names)
+            df <- private$ci_meta_df %>% dplyr::filter(split_regions %in% region_names & design %in% design_names)
+            
             # 3. Produce the graph
             if (is.null(title)) {
                 title <- paste(unique(private$df[["group"]]), collapse=" vs ")
