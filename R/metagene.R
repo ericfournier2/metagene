@@ -307,44 +307,54 @@ metagene <- R6Class("metagene",
         },
         produce_data_frame = function(alpha=NA, sample_count=NA, avoid_gaps=NA, 
                                       gaps_threshold=NA, design_metadata=NA) {
+            self$add_metadata()
+            invisible(self)
+        },
+        calculate_ci = function(alpha=NA, sample_count=NA) {
             # Make sure the previous steps have been completed.
             if(is.null(private$split_coverages)) {
                 self$split_coverages_by_regions()
             }
                                                     
             # If parameters hae been updated, set the data-frame to NULL.
-            if (private$ph$update_params(alpha, sample_count, avoid_gaps, gaps_threshold, design_metadata)) {
-                private$df <- NULL
+            if (private$ph$update_params(alpha, sample_count)) {
+                private$ci_df <- NULL
+            }
+
+            bm = private$start_bm("Producing data-frame")
+            private$ci_df = calculate_matrices_ci(private$split_coverages,
+                                                  private$ph$get('sample_count'), 
+                                                  private$ph$get('alpha'))
+            private$stop_bm(bm)
+            
+            invisible(private$ci_df)
+        },
+        add_metadata = function(design_metadata) {
+            # Make sure the previous steps have been completed.
+            if(is.null(private$ci_df)) {
+                self$calculate_ci()
+            }
+                                                    
+            # If parameters hae been updated, set the data-frame to NULL.
+            if (private$ph$update_params(design_metadata)) {
+                private$ci_df <- NULL
+            }        
+            
+            if(is.null(private$ci_meta_df)) {
+                private$ci_meta_df = add_metadata_to_ci(private$ci_df,
+                                                        private$split_metadata_cache,
+                                                        private$ph$get("design_metadata")[private$ph$get("design_filter"),])
             }
             
-            if (is.null(private$df)) {
-                bm = private$start_bm("Producing data-frame")
-
-                # 2. Produce the data.frame 
-                private$df <- private$produce_data_frame_internal(
-                    input_matrices=private$split_coverages,
-                    alpha=private$ph$get('alpha'),
-                    sample_count=private$ph$get('sample_count'),
-                    avoid_gaps=private$ph$get('avoid_gaps'), 
-                    gaps_threshold=private$ph$get('gaps_threshold'),
-                    region_metadata=private$split_metadata_cache,
-                    design_metadata=private$ph$get("design_metadata"))
-                private$stop_bm(bm)
-                    
-                invisible(self)
-            }
-        },
+            invisible(private$ci_meta_df)
+        }
         plot = function(region_names = NULL, design_names = NULL, title = NULL,
                         x_label = NULL, facet_by=NULL, group_by=NULL) {
             # 1. Get the correctly formatted table
-            if (length(private$table) == 0) {
-                self$produce_table()
+            if(is.null(private$ci_meta_df)) {
+                self$add_metadata()
             }
 
-            # 2. Produce the data frame
-            if (nrow(private$df) == 0) {
-                self$produce_data_frame()
-            }
             df <- self$get_data_frame(region_names = region_names,
                                     design_names = design_names)
             # 3. Produce the graph
@@ -381,7 +391,7 @@ metagene <- R6Class("metagene",
                 private$ph$set("design_metadata", data.frame(design=design[,1]))
             }
             
-            if(private$ph$update_params(design, normalization, noise_removal)) {
+            if(private$ph$update_params(design, normalization, noise_removal, design_filter)) {
                 private$grouped_coverages = NULL
             }
 
@@ -432,7 +442,7 @@ metagene <- R6Class("metagene",
             if(is.null(private$split_coverages)) {
                 bm = private$start_bm("Splitting coverages by region type")
                 split_res = split_matrices(private$binned_coverages,
-                                           private$region_metadata,
+                                           private$region_metadata[private$ph$get("region_filter"),],
                                            private$ph$get('split_by'))
                 private$split_coverages = split_res$Matrices
                 private$split_metadata_cache = split_res$Metadata
@@ -455,6 +465,7 @@ metagene <- R6Class("metagene",
         bam_handler = "",
         parallel_job = "",
         ph=NULL,
+        ci_df=NULL
         
         print_verbose = function(to_print) {
             if (private$ph$get("verbose")) {
@@ -666,7 +677,7 @@ metagene <- R6Class("metagene",
         produce_data_frame_internal = function(input_matrices, alpha, sample_count,
                             avoid_gaps, gaps_threshold, 
                              region_metadata, design_metadata) {
-            results <- private$matrix_resampling(input_matrices, sample_count, alpha)
+            results <- calculate_matrices_ci(input_matrices, sample_count, alpha)
             
             # Add metadata.
             results <- as.data.frame(results)
@@ -676,72 +687,6 @@ metagene <- R6Class("metagene",
             
             return(results)            
         },
-        matrix_resampling = function(matrices, sample_count, alpha, reuse=TRUE) {
-            # Given a vector x, resamples it sample_count time and returns
-            # the mean and confidence intervals at the alpha level.
-            calc_bin_ci = function(x, sample_count, alpha, sample_indices=NULL) { 
-                if(is.null(sample_indices)) {
-                    sample_indices = sample.int(length(x), size=length(x)*sample_count, replace=TRUE)
-                }
-                
-                # Resample into a matrix of length(x) rows and sample_count columns.
-                sampled = matrix(x[sample_indices], ncol=sample_count);
-                
-                # Calculate the column means, which are the means of each resampling.
-                means = colMeans(sampled);
-                
-                # Put the results in a named vector.
-                return(c(mean(x), quantile(means, c(alpha/2, 1-(alpha/2)))))
-            }
-            
-            # Given a list with elements Region, Design and Matrix, resamples all columns
-            # of Matrix sample_count times and calculate confidence intervals of the means at level alpha.
-            # The results are stored as a data-frame with the additional design and region columns.
-            calc_ci = function(x, sample_count, alpha, reuse) {
-                if(reuse) {
-                    sample_indices = sample.int(nrow(x$Matrix), size=nrow(x$Matrix)*sample_count, replace=TRUE)
-                } else {
-                    sample_indices = NULL
-                }
-                
-                # Resample and calculate CIs for all columns of the matrix.
-                res = t(apply(x$Matrix, 2, calc_bin_ci, sample_count=sample_count, alpha=alpha, sample_indices=sample_indices))
-                
-                # Format the resulting data-frame correctly.
-                colnames(res) = c("value", "qinf", "qsup")
-                res = data.frame(res)
-                res$design = x$Design
-                res$region = x$Region
-                
-                res
-            }
-            
-            # Get coverage matrices, and reformat them into a flat list
-            # so each matrix can be processed in parralel.
-            matrix_list = list()
-            i=1
-            for(design in names(matrices)) {
-                for(region in names(matrices[[design]])) {
-                    matrix_list[[i]] = list(Region=region, Design=design, Matrix=matrices[[design]][[region]])
-                    i = i + 1
-                }
-            }
-            
-             Perform resampling in parralel.
-            ci <- private$parallel_job$launch_job(
-                        data = matrix_list,
-                        FUN = calc_ci,
-                        sample_count = sample_count,
-                        alpha = alpha,
-                        reuse=FALSE)
-            #ci = lapply(matrix_list, calc_ci, sample_count = sample_count, alpha = alpha, reuse=FALSE)
-            
-            # Concatenate resampling results and add bin column.
-            res = data.table::rbindlist(ci, idcol=NULL, use.names=TRUE, fill=FALSE)
-            res$bin = 1:ncol(matrix_list[[1]]$Matrix)
-            
-            res
-        },      
         get_raw_coverages_internal = function(filenames = NULL) {
             if (is.null(filenames)) {
                 private$coverages
