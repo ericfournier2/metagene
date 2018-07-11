@@ -170,16 +170,22 @@ metagene <- R6Class("metagene",
 
             # Validate the format of bam_files, since it is used to preprocess certain
             # parameters before initialization.
-            private$validate_bam_files_format(bam_files)
+            validate_bam_files_format(bam_files)
             
             if(region_mode=="auto") {
                 region_mode = ifelse(assay=='chipseq', "separate", "stitch")
             }
             
+            # Define default design.
+            default_design = private$get_complete_design(bam_files)
+            design_metadata = data.frame(design=default_design[,1])
+            
             # Initialize parameter handler.
+            
             private$ph <- parameter_manager$new(
                 param_values=list(
-                    design=private$get_complete_design(bam_files),
+                    design=default_design,
+                    design_metadata=design_metadata,
                     bam_files=private$name_from_path(bam_files),
                     padding_size=padding_size,
                     verbose=verbose,
@@ -204,10 +210,7 @@ metagene <- R6Class("metagene",
                     padding_size=validate_padding_size,
                     verbose=validate_verbose,
                     force_seqlevels=validate_force_seqlevels,
-                    paired_end=validate_paired_end,
                     assay=validate_assay,
-                    strand_specific=validate_strand_specific,
-                    paired_end_strand_mode=validate_paired_end_strand_mode,
                     normalization=validate_normalization,
                     noise_removal=validate_noise_removal,
                     avoid_gaps=validate_avoid_gaps,
@@ -220,7 +223,7 @@ metagene <- R6Class("metagene",
                 overall_validation=validate_combination)
                 
             # Prepare objects for parralel processing.
-            private$validate_cores(cores)
+            validate_cores(cores)
             private$parallel_job <- Parallel_Job$new(cores)
             
             # Prepare bam files
@@ -301,29 +304,29 @@ metagene <- R6Class("metagene",
             }
         },
         produce_data_frame = function(alpha=NA, sample_count=NA, avoid_gaps=NA, 
-                                      gaps_threshold=NA) {
+                                      gaps_threshold=NA, design_metadata=NA) {
             # Make sure the previous steps have been completed.
             if(is.null(private$split_coverages)) {
                 self$split_coverages_by_regions()
             }
                                                     
             # If parameters hae been updated, set the data-frame to NULL.
-            if (private$ph$update_params(alpha, sample_count, avoid_gaps, gaps_threshold)) {
+            if (private$ph$update_params(alpha, sample_count, avoid_gaps, gaps_threshold, design_metadata)) {
                 private$df <- NULL
             }
             
             if (is.null(private$df)) {
                 bm = private$start_bm("Producing data-frame")
-                
 
                 # 2. Produce the data.frame 
-                private$df <- private$produce_data_frame_internal(input_matrices=private$split_matrices,
+                private$df <- private$produce_data_frame_internal(
+                    input_matrices=private$split_coverages,
                     alpha=private$ph$get('alpha'),
                     sample_count=private$ph$get('sample_count'),
                     avoid_gaps=private$ph$get('avoid_gaps'), 
                     gaps_threshold=private$ph$get('gaps_threshold'),
                     region_metadata=private$split_metadata_cache,
-                    design_metadata=private$design_metadata_cache)
+                    design_metadata=private$ph$get("design_metadata"))
                 private$stop_bm(bm)
                     
                 invisible(self)
@@ -369,6 +372,12 @@ metagene <- R6Class("metagene",
         group_coverages = function(design=NA, normalization=NA, noise_removal=NA) {
             # Clean up the design so it'll have the expected format.
             design = private$clean_design(design, private$ph$get("bam_files"))
+
+            if(private$ph$have_params_changed(design)) {
+                # design has changed.
+                # Generate a new design metadata.
+                private$ph$set("design_metadata", data.frame(design=design[,1]))
+            }
             
             if(private$ph$update_params(design, normalization, noise_removal)) {
                 private$grouped_coverages = NULL
@@ -384,7 +393,7 @@ metagene <- R6Class("metagene",
             }
             private$stop_bm(bm)
             
-            private$grouped_coverages
+            invisible(private$grouped_coverages)
         },
         bin_coverages = function(bin_count=NA) {
             # Make sure the previous step has been performed.
@@ -398,14 +407,13 @@ metagene <- R6Class("metagene",
             
             if(is.null(private$binned_coverages)) {
                 bm = private$start_bm("Binning coverages")
-                private$binned_coverages = lapply(private$grouped_coverages,
-                                                  bin_coverages_s, 
-                                                  regions=private$regions,
-                                                  bin_count=private$ph$get("bin_count"))
+                private$binned_coverages = bin_coverages_s(private$grouped_coverages,
+                                                           regions=private$regions,
+                                                           bin_count=private$ph$get("bin_count"))
                 private$stop_bm(bm)
             }
            
-            return(private$binned_coverages)
+            invisible(private$binned_coverages)
         },
         split_coverages_by_regions = function(split_by=NA) {
             # Make sure the previous step has been performed.
@@ -429,20 +437,16 @@ metagene <- R6Class("metagene",
         }
     ),
     private = list(
-        params = list(),
         regions = GRangesList(),
         region_metadata = NULL,
         split_regions_cache = NULL,
         split_metadata_cache = NULL,
-        table = NULL,
-        design = data.frame(),
         design_metadata_cache=NULL,
         coverages = list(),
-        design_coverages = list(),
         grouped_coverages = NULL,
         binned_coverages = NULL,
         split_coverages = NULL,
-        df = data.frame(),
+        df = NULL,
         graph = "",
         bam_handler = "",
         parallel_job = "",
@@ -657,15 +661,15 @@ metagene <- R6Class("metagene",
         },
         produce_data_frame_internal = function(input_matrices, alpha, sample_count,
                             avoid_gaps, gaps_threshold, 
-                             region_metadata, design_metadata, bin_count) {
-
-            results <- private$matrix_resampling(input_matrices, sample_count, bin_count, alpha)
+                             region_metadata, design_metadata) {
+            results <- private$matrix_resampling(input_matrices, sample_count, alpha)
             
+            # Add metadata.
             results <- as.data.frame(results)
-            #browser()
             results$group <- as.factor(paste(results$design, results$region, sep="_"))
             results = dplyr::left_join(results, region_metadata, by=c(region="split_regions"))      
             results = dplyr::left_join(results, design_metadata, by=c(design="design"))      
+            
             return(results)            
         },
         matrix_resampling = function(matrices, sample_count, alpha, reuse=TRUE) {
@@ -712,21 +716,21 @@ metagene <- R6Class("metagene",
             # so each matrix can be processed in parralel.
             matrix_list = list()
             i=1
-            for(region in names(matrices)) {
-                for(design in names(matrices[[region]])) {
-                    matrix_list[[i]] = list(Region=region, Design=design, Matrix=matrices[[region]][[design]]$input)
+            for(design in names(matrices)) {
+                for(region in names(matrices[[design]])) {
+                    matrix_list[[i]] = list(Region=region, Design=design, Matrix=matrices[[design]][[region]])
                     i = i + 1
                 }
             }
             
-            # Perform resampling in parralel.
+             Perform resampling in parralel.
             ci <- private$parallel_job$launch_job(
                         data = matrix_list,
                         FUN = calc_ci,
                         sample_count = sample_count,
                         alpha = alpha,
                         reuse=FALSE)
-            #ci = lapply(matrix_list, calc_ci, sample_count = sample_count, alpha = alpha)
+            #ci = lapply(matrix_list, calc_ci, sample_count = sample_count, alpha = alpha, reuse=FALSE)
             
             # Concatenate resampling results and add bin column.
             res = data.table::rbindlist(ci, idcol=NULL, use.names=TRUE, fill=FALSE)
@@ -785,7 +789,7 @@ metagene <- R6Class("metagene",
         },
         validate_design = function(design) {
             validate_design_format(design)
-            validate_design_values(design)
+            private$validate_design_values(design)
         },
         validate_design_values = function(design) {
             # At least one file must be used in the design
@@ -798,7 +802,7 @@ metagene <- R6Class("metagene",
             if (!all(purrr::map_lgl(design$Samples[non_empty_rows], private$check_bam_files))) {
                 warning("At least one BAM file does not exist")
             }
-        }        
+        },        
         get_complete_design = function(bam_files) {
             bam_files = private$name_from_path(bam_files)
             
@@ -869,7 +873,7 @@ metagene <- R6Class("metagene",
             
             # Make sure the design is in the correct format (data-frame
             # with at least 2 columns) before we try improving it.
-            private$validate_design_format(design)
+            validate_design_format(design)
             
             # Standardize names used in first column to match those
             # used in bam_files.

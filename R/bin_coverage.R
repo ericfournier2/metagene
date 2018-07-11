@@ -98,11 +98,38 @@ bin_region_coverages = function(coverages, regions, bin_count) {
     return(results)
 }
 
-bin_coverages_s = function(coverage_s, regions, bin_count) {
-    if(is.null(coverage_s)) {
-        return(NULL)
+bin_coverages_s = function(coverages, regions, bin_count) {
+    # In single_strand mode, we'll only have coverage info for the undefined strand.
+    if(is.null(coverages[["+"]]) && is.null(coverages[["-"]])) {
+        return(bin_region_coverages(coverages[["*"]], regions, bin_count))
     } else {
-        return(bin_region_coverages(coverage_s, regions, bin_count))
+        strand_split=split(regions, strand(regions))
+
+        # Combine coverages? Star coverage should include every single read.
+        # Maybe not compute star coverage and add + and - here?
+        ## Figure out star coverage by combining regions.
+        # star_coverage_plus = bin_region_coverages(coverages[["+"]], strand_split[["*"]], bin_count)
+        # star_coverage_minus = bin_region_coverages(coverages[["-"]], strand_split[["*"]], bin_count)
+        # star_coverage_star = bin_region_coverages(coverages[["*"]], strand_split[["*"]], bin_count)
+        # 
+        # # Recombine star coverages.
+        # star_coverage = purrr::pmap(list(star_coverage_plus, star_coverage_minus, star_coverage_star), function(x, y, z) {x+y+z})
+        
+        coverage_list = list("+"=bin_region_coverages(coverages[["+"]], strand_split[["+"]], bin_count),
+                             "-"=bin_region_coverages(coverages[["-"]], strand_split[["-"]], bin_count),
+                             "*"=bin_region_coverages(coverages[["*"]], strand_split[["*"]], bin_count))
+        
+        recombine_regions = function(x,y,z, strand_info, bin_count) {
+            results = matrix(0, nrow=length(strand_info), ncol=bin_count)
+            results[strand_info=="+",] = x
+            results[strand_info=="-",] = y
+            results[strand_info=="*",] = z
+            
+            results
+        }
+        
+        # Recombine all coverages
+        purrr::pmap(coverage_list, recombine_regions, strand_info=strand(regions), bin_count=bin_count)
     }
 }
 
@@ -164,22 +191,14 @@ merge_reduce = function(coverages, design, design_name, design_value) {
 }
 
 split_matrix = function(input_matrix, split_indices) {
-    lapply(split_indices, function(indices) { input_matrix[indices] })
-}
-
-split_matrices_s = function(matrices, split_indices) {
-    if(is.null(matrices)) {
-        return(NULL)
-    } else {
-        return(lapply(matrices, split_matrix, split_indices=split_indices))
-    }
+    lapply(split_indices, function(indices) { input_matrix[indices,] })
 }
 
 split_matrices = function(matrices, metadata, split_by) {
     split_indices = split_by_metadata(metadata, split_by)
     
-    res_matrices = lapply(matrices, split_matrices_s, split_indices=split_indices$Indices)
-    return(list(Matrices=res_matrix, Metadata=split_indices$Metadata)))
+    res_matrices = lapply(matrices, split_matrix, split_indices=split_indices$Indices)
+    return(list(Matrices=res_matrices, Metadata=split_indices$Metadata))
 }
 
 split_by_metadata = function(metadata, split_by) {
@@ -211,7 +230,7 @@ split_by_metadata = function(metadata, split_by) {
             partition[selected_subset] = i
             
             # We'll store the combination values for later use.
-            new_metadata_list[[region_name]] = combinations[i,]
+            new_metadata_list[[region_name]] = combinations[i,, drop=FALSE]
         }
     }
     
