@@ -205,7 +205,8 @@ metagene <- R6Class("metagene",
                     region_mode=region_mode,
                     split_by="region",
                     region_filter=TRUE,
-                    design_filter=TRUE),
+                    design_filter=TRUE,
+                    resampling_strategy="bin"),
                 param_validations=list(
                     design=private$validate_design,
                     bam_files=validate_bam_files,
@@ -316,21 +317,23 @@ metagene <- R6Class("metagene",
             self$add_metadata()
             invisible(self)
         },
-        calculate_ci = function(alpha=NA, sample_count=NA) {
+        calculate_ci = function(alpha=NA, sample_count=NA, resampling_strategy=NA) {
             # Make sure the previous steps have been completed.
             if(is.null(private$split_coverages)) {
                 self$split_coverages_by_regions()
             }
                                                     
             # If parameters hae been updated, set the data-frame to NULL.
-            if (private$ph$update_params(alpha, sample_count)) {
+            if (private$ph$update_params(alpha, sample_count, resampling_strategy)) {
                 private$ci_df <- NULL
             }
 
             bm = private$start_bm("Producing data-frame")
             private$ci_df = calculate_matrices_ci(private$split_coverages,
                                                   private$ph$get('sample_count'), 
-                                                  private$ph$get('alpha'))
+                                                  private$ph$get('alpha'),
+                                                  private$ph$get('resampling_strategy'),
+                                                  private$parallel_job)
             private$stop_bm(bm)
             
             invisible(private$ci_df)
