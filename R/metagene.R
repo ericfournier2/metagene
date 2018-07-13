@@ -199,7 +199,6 @@ metagene <- R6Class("metagene",
                     avoid_gaps=FALSE,
                     gaps_threshold=0,
                     bin_count=100,
-                    flip_regions=FALSE,
                     alpha=0.05,
                     sample_count=1000,
                     region_mode=region_mode,
@@ -219,7 +218,6 @@ metagene <- R6Class("metagene",
                     avoid_gaps=validate_avoid_gaps,
                     gaps_threshold=validate_gaps_threshold,
                     bin_count=validate_bin_count,
-                    flip_regions=validate_flip_regions,
                     alpha=validate_alpha,
                     sample_count=validate_sample_count,
                     region_mode=validate_region_mode),
@@ -268,27 +266,28 @@ metagene <- R6Class("metagene",
             return(private$split_coverage_cache)
         },
         get_data_frame = function(region_names = NULL, design_names = NULL) {
-            if (nrow(private$df) == 0) {
-                NULL
-            } else if (is.null(region_names) && is.null(design_names)) {
-                return(copy(private$df))
+            if(!is.null(private$ci_meta_df)) {
+                results = private$ci_meta_df
+            } else if(!is.null(private$ci_df)) {
+                results = private$ci_df
             } else {
-                if (!is.null(region_names)) {
-                    stopifnot(is.character(region_names))
-                    stopifnot(all(region_names %in% unique(private$table$region)))
-                } else {
-                    region_names <- unique(private$table$region)
-                }
-                if (!is.null(design_names)) {
-                    stopifnot(is.character(design_names))
-                    stopifnot(all(design_names %in% unique(private$table$design)))
-                } else {
-                    design_names <- colnames(private$ph$get("design"))[-1]
-                }
-                i <- (private$df$region %in% region_names &
-                      private$df$design %in% design_names)
-                return(copy(private$df[i,]))
+                return(NULL)
             }
+            
+            region_subset = TRUE
+            if (!is.null(region_names)) {
+                stopifnot(is.character(region_names))
+                stopifnot(all(region_names %in% unique(private$table$region)))
+                region_subset = results$region %in% region_names
+            }
+            
+            design_subset = TRUE
+            if (!is.null(design_names)) {
+                stopifnot(is.character(design_names))
+                stopifnot(all(design_names %in% unique(private$table$design)))
+                design_subset = results$region %in% region_names
+            }
+            return(results[region_subset & design_subset,,drop=F])
         },
         get_plot = function() {
             if (is.character(private$graph)) {
@@ -351,7 +350,7 @@ metagene <- R6Class("metagene",
             if(is.null(private$ci_meta_df)) {
                 private$ci_meta_df = add_metadata_to_ci(private$ci_df,
                                                         private$split_metadata_cache,
-                                                        private$ph$get("design_metadata")[private$ph$get("design_filter"),])
+                                                        private$ph$get("design_metadata")[private$ph$get("design_filter"),, drop=FALSE])
             }
             
             invisible(private$ci_meta_df)
@@ -957,6 +956,6 @@ metagene <- R6Class("metagene",
             new_metadata=data.table::rbindlist(new_metadata_list, use.names=TRUE)
             new_metadata$split_regions = names(new_metadata_list)
             return(list(regions=out_regions, metadata=new_metadata))        
-        }        
+        }
     )
 )
