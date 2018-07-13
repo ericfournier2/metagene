@@ -455,6 +455,79 @@ metagene <- R6Class("metagene",
                 private$split_metadata_cache = split_res$Metadata
                 private$stop_bm(bm)                                         
             }
+        },
+        update_params_and_invalidate_caches = function(...) {
+            # This prologue makes it possible to infer parameter names from the
+            # name of the variable it is passed in. This allows us to avoid
+            # design=design, bin_count=bin_count repetitive code.
+            #
+            # It cannot be factorized into a function, since in any further call,
+            # the argument list will deparse as "list(...)".
+            param_names_alt = sapply( substitute(list(...)), deparse)[-1]
+            arg_list = list(...)
+            if(is.null(names(arg_list))) {
+                names(arg_list) = param_names_alt
+            } else {
+                names(arg_list) = ifelse(names(arg_list)=="", param_names_alt, names(arg_list))
+            }
+        
+            # Associate each parameter witht he step it is used in.
+            param_step_map = c(design="group_coverages",
+                               normalization="group_coverages", 
+                               noise_removal="group_coverages", 
+                               design_filter="group_coverages",
+                               bin_count="bin_coverages", 
+                               region_filter="bin_coverages",
+                               split_by="split_coverages",
+                               region_filter="split_coverages",
+                               alpha="calculate_ci", 
+                               sample_count="calculate_ci", 
+                               resampling_strategy="calculate_ci",
+                               design_metadata="add_metadata")
+                               
+            # Associate each step with the cache it generates,
+            # in reverse order, so we can easily determine which
+            # caches to invalidate when a particular step needs to be re-run.
+            step_cache_map = c(add_metadata="ci_meta_df",
+                               calculate_ci="ci_df",
+                               split_coverages="split_coverages",
+                               bin_coverages="binned_coverages",
+                               group_coverages="grouped_coverages")
+                               
+            cache_invalidated=FALSE
+            
+            # Loop over all passed-in parameters.
+            for(arg_index in 1:length(arg_list)) {
+                arg_name=names(arg_list)[arg_index]
+                cat("Analyzing ", arg_name, "\n")
+                # Determine if the parameter has changed from its last value.
+                if(do.call(private$ph$have_params_changed, arg_list[arg_index])) {
+                    cat(arg_name, " has changed.\n")
+                    # Determine which step the parameter belongs to.
+                    invalidated_step = param_step_map[names(arg_list)[arg_index]]
+                    if(!is.na(invalidated_step)) {
+                        
+                        # Invalidate all caches for the step the parameter belonged to,
+                        # as well as all caches for downsteam steps.
+                        invalidated_caches = step_cache_map[1:which(names(step_cache_map)==invalidated_step)]
+                        cat(paste0(invalidated_caches, collapse=", "), " will be invalidated.\n")
+                        for(cache in invalidated_caches) {
+                            private[[cache]] = NULL
+                            cache_invalidated = TRUE
+                        }
+                    }
+                }
+            }
+            
+            do.call(private$ph$update_params, arg_list)
+            
+            return(cache_invalidated)
+        },
+        produce_metagene = function(...) {
+            self$update_params_and_invalidate_caches(...)
+            self$add_metadata()
+            
+            invisible(self)
         }
     ),
     private = list(
