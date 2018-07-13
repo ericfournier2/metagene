@@ -228,8 +228,7 @@ metagene <- R6Class("metagene",
             # Update any other parameter passed as a ... argument.
             # Since the parameter manager is locked, any non-existant
             # parameter will cause an error.
-            extra_args = list(...)
-            private$ph$update_params(list(...))
+            private$ph$update_params(...)
                 
             # Prepare objects for parralel processing.
             validate_cores(cores)
@@ -338,7 +337,7 @@ metagene <- R6Class("metagene",
             
             invisible(private$ci_df)
         },
-        add_metadata = function(design_metadata) {
+        add_metadata = function(design_metadata=NA) {
             # Make sure the previous steps have been completed.
             if(is.null(private$ci_df)) {
                 self$calculate_ci()
@@ -356,7 +355,7 @@ metagene <- R6Class("metagene",
             }
             
             invisible(private$ci_meta_df)
-        }
+        },
         plot = function(region_names = NULL, design_names = NULL, title = NULL,
                         x_label = NULL, facet_by=NULL, group_by=NULL) {
             # 1. Get the correctly formatted table
@@ -474,7 +473,8 @@ metagene <- R6Class("metagene",
         bam_handler = "",
         parallel_job = "",
         ph=NULL,
-        ci_df=NULL
+        ci_df=NULL,
+        ci_meta_df=NULL,
         
         print_verbose = function(to_print) {
             if (private$ph$get("verbose")) {

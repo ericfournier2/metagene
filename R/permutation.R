@@ -220,7 +220,7 @@ calculate_matrices_ci = function(matrices, sample_count, alpha, resampling_mode,
     # Perform resampling in parralel.
     if(resampling_mode=="profile") {
         reuse=TRUE
-    } else if(resampling_mode="bin") {
+    } else if(resampling_mode=="bin") {
         reuse=FALSE
     } else {
         stop("resampling_mode must be 'profile' or 'bin'")
