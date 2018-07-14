@@ -344,7 +344,7 @@ metagene <- R6Class("metagene",
                                                     
             # If parameters hae been updated, set the data-frame to NULL.
             if (private$ph$update_params(design_metadata)) {
-                private$ci_df <- NULL
+                private$ci_meta_df <- NULL
             }        
             
             if(is.null(private$ci_meta_df)) {
@@ -634,7 +634,13 @@ metagene <- R6Class("metagene",
             return(regions)
         },
         produce_coverages = function() {
-            regions <- GenomicRanges::reduce(BiocGenerics::unlist(private$regions))
+            if(private$ph$get("region_mode")=="stitch") {
+                regions = BiocGenerics::unlist(private$regions)
+            } else {
+                regions = private$regions
+            }
+            
+            regions <- GenomicRanges::reduce(regions)
             bam_files = private$ph$get("bam_files")
             res <- private$parallel_job$launch_job(
                         data = bam_files,

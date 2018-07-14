@@ -37,7 +37,8 @@ Depends:
     R (>= 3.4.0),
     R6 (>= 2.0),
     GenomicRanges,
-    BiocParallel
+    BiocParallel,
+    dplyr
 Imports:
     rtracklayer,
     gplots,

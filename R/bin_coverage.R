@@ -9,7 +9,7 @@ get_subtable = function(coverages, gr, bcount) {
 
 get_view_means = function(gr, bcount, cov) {
     chr <- unique(as.character(GenomeInfoDb::seqnames(gr)))
-    gr <- unlist(tile(unlist(gr), n=bcount))
+    gr <- unlist(tile(gr, n=bcount))
     stopifnot(length(chr) == 1)
     views <- Views(cov[[chr]], start(gr), end(gr))
     viewMeans(views)
@@ -19,7 +19,7 @@ bin_contiguous_regions <- function(coverage, regions, bin_count) {
   m <-  matrix(get_subtable(coverage, regions, bin_count), ncol=bin_count, byrow=TRUE)
     
   mr <- m[,bin_count:1]
-  i <-as.logical(strand(unlist(regions))=="-")
+  i <-as.logical(strand(regions)=="-")
   m[i,] <- mr[i,]
   
   m
@@ -220,11 +220,15 @@ split_by_metadata = function(metadata, split_by) {
         for(j in 1:ncol(combinations)) {
             col_name = colnames(combinations)[j]
             col_value = combinations[i,j]
-            selected_subset = selected_subset & (metadata[[col_name]] == col_value)
+            if(!is.na(col_value)) {
+                selected_subset = selected_subset & (metadata[[col_name]] == col_value) & !is.na(metadata[[col_name]])
+            } else {
+                selected_subset = selected_subset & is.na(metadata[[col_name]])
+            }
         }
         
         # If at least one row is selected, generate a name and assign it.
-        if(sum(selected_subset) > 0) {
+        if(sum(selected_subset, na.rm=TRUE) > 0) {
             region_name = paste(combinations[i,], collapse=";")
             out_subsets[[region_name]] = selected_subset
             partition[selected_subset] = i
