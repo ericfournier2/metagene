@@ -173,7 +173,7 @@ metagene <- R6Class("metagene",
             validate_bam_files_format(bam_files)
             
             if(region_mode=="auto") {
-                region_mode = ifelse(assay=='chipseq', "separate", "stitch")
+                region_mode = ifelse(assay=='rnaseq', "stitch", "separate")
             }
             
             # Define default design.
@@ -245,9 +245,7 @@ metagene <- R6Class("metagene",
             private$regions <- private$prepare_regions(regions, private$ph$get("region_mode"), region_metadata)
 
             # Parse bam files
-            bm = private$start_bm("Calculating coverages")
             private$coverages <- private$produce_coverages()    
-            private$stop_bm(bm)
         },
         get_bam_count = function(filename) {
             # Parameters validation are done by Bam_Handler object
@@ -317,40 +315,31 @@ metagene <- R6Class("metagene",
         },
         calculate_ci = function(alpha=NA, sample_count=NA, resampling_strategy=NA) {
             # Make sure the previous steps have been completed.
-            if(is.null(private$split_coverages)) {
-                self$split_coverages_by_regions()
-            }
-                                                    
-            # If parameters hae been updated, set the data-frame to NULL.
-            if (private$ph$update_params(alpha, sample_count, resampling_strategy)) {
-                private$ci_df <- NULL
-            }
+            self$split_coverages_by_regions()
+            update_params_and_invalidate_caches(alpha, sample_count, resampling_strategy)
 
-            bm = private$start_bm("Producing data-frame")
-            private$ci_df = calculate_matrices_ci(private$split_coverages,
-                                                  private$ph$get('sample_count'), 
-                                                  private$ph$get('alpha'),
-                                                  private$ph$get('resampling_strategy'),
-                                                  private$parallel_job)
-            private$stop_bm(bm)
+            if(is.null(private$ci_df)) {
+                bm = private$start_bm("Producing data-frame")
+                private$ci_df = calculate_matrices_ci(private$split_coverages,
+                                                      private$ph$get('sample_count'), 
+                                                      private$ph$get('alpha'),
+                                                      private$ph$get('resampling_strategy'),
+                                                      private$parallel_job)
+                private$stop_bm(bm)
+            }
             
             invisible(private$ci_df)
         },
         add_metadata = function(design_metadata=NA) {
             # Make sure the previous steps have been completed.
-            if(is.null(private$ci_df)) {
-                self$calculate_ci()
-            }
+            self$calculate_ci()
+            update_params_and_invalidate_caches(alpha, sample_count, resampling_strategy)
                                                     
-            # If parameters hae been updated, set the data-frame to NULL.
-            if (private$ph$update_params(design_metadata)) {
-                private$ci_meta_df <- NULL
-            }        
-            
             if(is.null(private$ci_meta_df)) {
+                filtered_design = private$ph$get("design_metadata")[private$ph$get("design_filter"),, drop=FALSE]
                 private$ci_meta_df = add_metadata_to_ci(private$ci_df,
                                                         private$split_metadata_cache,
-                                                        private$ph$get("design_metadata")[private$ph$get("design_filter"),, drop=FALSE])
+                                                        filtered_design)
             }
             
             invisible(private$ci_meta_df)
@@ -358,9 +347,7 @@ metagene <- R6Class("metagene",
         plot = function(region_names = NULL, design_names = NULL, title = NULL,
                         x_label = NULL, facet_by=NULL, group_by=NULL) {
             # 1. Get the correctly formatted table
-            if(is.null(private$ci_meta_df)) {
-                self$add_metadata()
-            }
+            self$add_metadata()
 
             df <- private$ci_meta_df %>% dplyr::filter(split_regions %in% region_names & design %in% design_names)
             
@@ -398,33 +385,27 @@ metagene <- R6Class("metagene",
                 private$ph$set("design_metadata", data.frame(design=design[,1]))
             }
             
-            if(private$ph$update_params(design, normalization, noise_removal, design_filter)) {
-                private$grouped_coverages = NULL
-            }
-
-            bm <- private$start_bm("Grouping and normalizing coverages")
-            design_col_to_keep = rep_len(private$ph$get("design_filter"), ncol(private$ph$get("design")) - 1)
-            design_col_to_keep = 1 + which(design_col_to_keep)
+            update_params_and_invalidate_caches(design, normalization, noise_removal, design_filter)
+            
             if(is.null(private$grouped_coverages)) {
+                bm <- private$start_bm("Grouping and normalizing coverages")
+                design_col_to_keep = rep_len(private$ph$get("design_filter"), ncol(private$ph$get("design")) - 1)
+                design_col_to_keep = 1 + which(design_col_to_keep)            
                 private$grouped_coverages = lapply(private$get_coverages_internal(),
                                                    group_coverages_s,
                                                    private$ph$get("design")[, c(1, design_col_to_keep)],
                                                    private$ph$get("noise_removal"),
                                                    private$bam_handler)
+                private$stop_bm(bm)                                                   
             }
-            private$stop_bm(bm)
+
             
             invisible(private$grouped_coverages)
         },
         bin_coverages = function(bin_count=NA, region_filter=NA) {
             # Make sure the previous step has been performed.
-            if(is.null(private$grouped_coverages)) {
-                self$group_coverages()
-            }
-        
-            if(private$ph$update_params(bin_count, region_filter)) {
-                private$binned_coverages = NULL
-            }
+            self$group_coverages()
+            update_params_and_invalidate_caches(bin_count, region_filter)
             
             if(is.null(private$binned_coverages)) {
                 bm = private$start_bm("Binning coverages")
@@ -438,13 +419,8 @@ metagene <- R6Class("metagene",
         },
         split_coverages_by_regions = function(split_by=NA) {
             # Make sure the previous step has been performed.
-            if(is.null(private$binned_coverages)) {
-                self$bin_coverages()
-            }
-            
-            if(private$ph$update_params(split_by)) {
-                private$split_coverages = NULL
-            }
+            self$bin_coverages()
+            update_params_and_invalidate_caches(split_by)
             
             if(is.null(private$split_coverages)) {
                 bm = private$start_bm("Splitting coverages by region type")
@@ -761,19 +737,6 @@ metagene <- R6Class("metagene",
                 return(names(coverages[['*']]))
             }
         },
-        produce_data_frame_internal = function(input_matrices, alpha, sample_count,
-                            avoid_gaps, gaps_threshold, 
-                             region_metadata, design_metadata) {
-            results <- calculate_matrices_ci(input_matrices, sample_count, alpha)
-            
-            # Add metadata.
-            results <- as.data.frame(results)
-            results$group <- as.factor(paste(results$design, results$region, sep="_"))
-            results = dplyr::left_join(results, region_metadata, by=c(region="split_regions"))      
-            results = dplyr::left_join(results, design_metadata, by=c(design="design"))      
-            
-            return(results)            
-        },
         get_raw_coverages_internal = function(filenames = NULL) {
             if (is.null(filenames)) {
                 private$coverages
@@ -814,9 +777,7 @@ metagene <- R6Class("metagene",
         },
         get_coverages_internal = function() {
             if (!is.null(private$ph$get("normalization"))) {
-                bm = private$start_bm("Normalizing coverages")
                 coverages <- private$get_normalized_coverages_internal()    
-                private$stop_bm(bm)
             } else {
                 coverages <- private$get_raw_coverages_internal()
             }
