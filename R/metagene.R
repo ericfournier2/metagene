@@ -316,7 +316,7 @@ metagene <- R6Class("metagene",
         calculate_ci = function(alpha=NA, sample_count=NA, resampling_strategy=NA) {
             # Make sure the previous steps have been completed.
             self$split_coverages_by_regions()
-            update_params_and_invalidate_caches(alpha, sample_count, resampling_strategy)
+            private$update_params_and_invalidate_caches(alpha, sample_count, resampling_strategy)
 
             if(is.null(private$ci_df)) {
                 bm = private$start_bm("Producing data-frame")
@@ -333,7 +333,7 @@ metagene <- R6Class("metagene",
         add_metadata = function(design_metadata=NA) {
             # Make sure the previous steps have been completed.
             self$calculate_ci()
-            update_params_and_invalidate_caches(alpha, sample_count, resampling_strategy)
+            private$update_params_and_invalidate_caches(design_metadata)
                                                     
             if(is.null(private$ci_meta_df)) {
                 filtered_design = private$ph$get("design_metadata")[private$ph$get("design_filter"),, drop=FALSE]
@@ -349,7 +349,7 @@ metagene <- R6Class("metagene",
             # 1. Get the correctly formatted table
             self$add_metadata()
 
-            df <- private$ci_meta_df %>% dplyr::filter(split_regions %in% region_names & design %in% design_names)
+            df <- self$get_data_frame(region_names, design_names)
             
             # 3. Produce the graph
             if (is.null(title)) {
@@ -385,7 +385,7 @@ metagene <- R6Class("metagene",
                 private$ph$set("design_metadata", data.frame(design=design[,1]))
             }
             
-            update_params_and_invalidate_caches(design, normalization, noise_removal, design_filter)
+            private$update_params_and_invalidate_caches(design, normalization, noise_removal, design_filter)
             
             if(is.null(private$grouped_coverages)) {
                 bm <- private$start_bm("Grouping and normalizing coverages")
@@ -405,7 +405,7 @@ metagene <- R6Class("metagene",
         bin_coverages = function(bin_count=NA, region_filter=NA) {
             # Make sure the previous step has been performed.
             self$group_coverages()
-            update_params_and_invalidate_caches(bin_count, region_filter)
+            private$update_params_and_invalidate_caches(bin_count, region_filter)
             
             if(is.null(private$binned_coverages)) {
                 bm = private$start_bm("Binning coverages")
@@ -420,84 +420,17 @@ metagene <- R6Class("metagene",
         split_coverages_by_regions = function(split_by=NA) {
             # Make sure the previous step has been performed.
             self$bin_coverages()
-            update_params_and_invalidate_caches(split_by)
+            private$update_params_and_invalidate_caches(split_by)
             
             if(is.null(private$split_coverages)) {
                 bm = private$start_bm("Splitting coverages by region type")
                 split_res = split_matrices(private$binned_coverages,
-                                           private$region_metadata[private$ph$get("region_filter"),],
+                                           private$region_metadata[private$ph$get("region_filter"),, drop=FALSE],
                                            private$ph$get('split_by'))
                 private$split_coverages = split_res$Matrices
                 private$split_metadata_cache = split_res$Metadata
                 private$stop_bm(bm)                                         
             }
-        },
-        update_params_and_invalidate_caches = function(...) {
-            # This prologue makes it possible to infer parameter names from the
-            # name of the variable it is passed in. This allows us to avoid
-            # design=design, bin_count=bin_count repetitive code.
-            #
-            # It cannot be factorized into a function, since in any further call,
-            # the argument list will deparse as "list(...)".
-            param_names_alt = sapply( substitute(list(...)), deparse)[-1]
-            arg_list = list(...)
-            if(is.null(names(arg_list))) {
-                names(arg_list) = param_names_alt
-            } else {
-                names(arg_list) = ifelse(names(arg_list)=="", param_names_alt, names(arg_list))
-            }
-        
-            # Associate each parameter witht he step it is used in.
-            param_step_map = c(design="group_coverages",
-                               normalization="group_coverages", 
-                               noise_removal="group_coverages", 
-                               design_filter="group_coverages",
-                               bin_count="bin_coverages", 
-                               region_filter="bin_coverages",
-                               split_by="split_coverages",
-                               region_filter="split_coverages",
-                               alpha="calculate_ci", 
-                               sample_count="calculate_ci", 
-                               resampling_strategy="calculate_ci",
-                               design_metadata="add_metadata")
-                               
-            # Associate each step with the cache it generates,
-            # in reverse order, so we can easily determine which
-            # caches to invalidate when a particular step needs to be re-run.
-            step_cache_map = c(add_metadata="ci_meta_df",
-                               calculate_ci="ci_df",
-                               split_coverages="split_coverages",
-                               bin_coverages="binned_coverages",
-                               group_coverages="grouped_coverages")
-                               
-            cache_invalidated=FALSE
-            
-            # Loop over all passed-in parameters.
-            for(arg_index in 1:length(arg_list)) {
-                arg_name=names(arg_list)[arg_index]
-                cat("Analyzing ", arg_name, "\n")
-                # Determine if the parameter has changed from its last value.
-                if(do.call(private$ph$have_params_changed, arg_list[arg_index])) {
-                    cat(arg_name, " has changed.\n")
-                    # Determine which step the parameter belongs to.
-                    invalidated_step = param_step_map[names(arg_list)[arg_index]]
-                    if(!is.na(invalidated_step)) {
-                        
-                        # Invalidate all caches for the step the parameter belonged to,
-                        # as well as all caches for downsteam steps.
-                        invalidated_caches = step_cache_map[1:which(names(step_cache_map)==invalidated_step)]
-                        cat(paste0(invalidated_caches, collapse=", "), " will be invalidated.\n")
-                        for(cache in invalidated_caches) {
-                            private[[cache]] = NULL
-                            cache_invalidated = TRUE
-                        }
-                    }
-                }
-            }
-            
-            do.call(private$ph$update_params, arg_list)
-            
-            return(cache_invalidated)
         },
         produce_metagene = function(...) {
             self$update_params_and_invalidate_caches(...)
@@ -599,12 +532,12 @@ metagene <- R6Class("metagene",
             } else {
                 first_or_null = function(x) {
                     if(length(x)>0) {
-                        return(mcols(x)[1,])
+                        return(mcols(x)[1,, drop=FALSE])
                     } else {
                         return(NULL)
                     }
                 }
-                private$region_metadata = do.call(rbind, lapply(regions_gr, first_or_null))
+                private$region_metadata = do.call(rbind, lapply(regions, first_or_null))
             }
             
             return(regions)
@@ -996,6 +929,73 @@ metagene <- R6Class("metagene",
             new_metadata=data.table::rbindlist(new_metadata_list, use.names=TRUE)
             new_metadata$split_regions = names(new_metadata_list)
             return(list(regions=out_regions, metadata=new_metadata))        
-        }
+        },
+        update_params_and_invalidate_caches = function(...) {
+            # This prologue makes it possible to infer parameter names from the
+            # name of the variable it is passed in. This allows us to avoid
+            # design=design, bin_count=bin_count repetitive code.
+            #
+            # It cannot be factorized into a function, since in any further call,
+            # the argument list will deparse as "list(...)".
+            param_names_alt = sapply( substitute(list(...)), deparse)[-1]
+            arg_list = list(...)
+            if(is.null(names(arg_list))) {
+                names(arg_list) = param_names_alt
+            } else {
+                names(arg_list) = ifelse(names(arg_list)=="", param_names_alt, names(arg_list))
+            }
+        
+            # Associate each parameter witht he step it is used in.
+            param_step_map = c(design="group_coverages",
+                               normalization="group_coverages", 
+                               noise_removal="group_coverages", 
+                               design_filter="group_coverages",
+                               bin_count="bin_coverages", 
+                               region_filter="bin_coverages",
+                               split_by="split_coverages",
+                               region_filter="split_coverages",
+                               alpha="calculate_ci", 
+                               sample_count="calculate_ci", 
+                               resampling_strategy="calculate_ci",
+                               design_metadata="add_metadata")
+                               
+            # Associate each step with the cache it generates,
+            # in reverse order, so we can easily determine which
+            # caches to invalidate when a particular step needs to be re-run.
+            step_cache_map = c(add_metadata="ci_meta_df",
+                               calculate_ci="ci_df",
+                               split_coverages="split_coverages",
+                               bin_coverages="binned_coverages",
+                               group_coverages="grouped_coverages")
+                               
+            cache_invalidated=FALSE
+            
+            # Loop over all passed-in parameters.
+            for(arg_index in 1:length(arg_list)) {
+                arg_name=names(arg_list)[arg_index]
+                cat("Analyzing ", arg_name, "\n")
+                # Determine if the parameter has changed from its last value.
+                if(do.call(private$ph$have_params_changed, arg_list[arg_index])) {
+                    cat(arg_name, " has changed.\n")
+                    # Determine which step the parameter belongs to.
+                    invalidated_step = param_step_map[names(arg_list)[arg_index]]
+                    if(!is.na(invalidated_step)) {
+                        
+                        # Invalidate all caches for the step the parameter belonged to,
+                        # as well as all caches for downsteam steps.
+                        invalidated_caches = step_cache_map[1:which(names(step_cache_map)==invalidated_step)]
+                        cat(paste0(invalidated_caches, collapse=", "), " will be invalidated.\n")
+                        for(cache in invalidated_caches) {
+                            private[[cache]] = NULL
+                            cache_invalidated = TRUE
+                        }
+                    }
+                }
+            }
+            
+            do.call(private$ph$update_params, arg_list)
+            
+            return(cache_invalidated)
+        }        
     )
 )

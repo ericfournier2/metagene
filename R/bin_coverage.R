@@ -191,7 +191,7 @@ merge_reduce = function(coverages, design, design_name, design_value) {
 }
 
 split_matrix = function(input_matrix, split_indices) {
-    lapply(split_indices, function(indices) { input_matrix[indices,] })
+    lapply(split_indices, function(indices) { input_matrix[indices,, drop=FALSE] })
 }
 
 split_matrices = function(matrices, metadata, split_by) {
