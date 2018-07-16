@@ -202,7 +202,7 @@ metagene <- R6Class("metagene",
                     alpha=0.05,
                     sample_count=1000,
                     region_mode=region_mode,
-                    split_by="region",
+                    split_by="region_name",
                     region_filter=TRUE,
                     design_filter=TRUE,
                     resampling_strategy="bin"),
@@ -433,8 +433,8 @@ metagene <- R6Class("metagene",
             }
         },
         produce_metagene = function(...) {
-            self$update_params_and_invalidate_caches(...)
-            self$add_metadata()
+            private$update_params_and_invalidate_caches(...)
+            self$plot()
             
             invisible(self)
         }
@@ -519,9 +519,8 @@ metagene <- R6Class("metagene",
             # Add a region column to all GRangesList elements.
             regions_with_extra_col = list()
             for(region_name in names(regions)) {
-                #mcols(regions[[region_name]])$region = region_name
                 regions_with_extra_col[[region_name]] = regions[[region_name]]
-                mcols(regions_with_extra_col[[region_name]])$region = region_name
+                mcols(regions_with_extra_col[[region_name]])$region_name = region_name
             }
             regions = GRangesList(regions_with_extra_col)
             

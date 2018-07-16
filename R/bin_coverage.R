@@ -82,7 +82,7 @@ bin_rle_list = function(x, bin_count) {
 
 bin_discontiguous_regions <- function(coverage, regions, bin_count) {
     rle_list = discontiguous_coverage(coverage, regions)
-    bin_list = lapply(rle_list, bin_rle_list, bin_count=100)
+    bin_list = lapply(rle_list, bin_rle_list, bin_count=bin_count)
     matrix(unlist(bin_list), ncol=bin_count, byrow=TRUE)
 }
 
