@@ -317,68 +317,6 @@ metagene <- R6Class("metagene",
             self$add_metadata()
             invisible(self)
         },
-        calculate_ci = function(alpha=NA, sample_count=NA, resampling_strategy=NA) {
-            # Make sure the previous steps have been completed.
-            self$split_coverages_by_regions()
-            private$update_params_and_invalidate_caches(alpha, sample_count, resampling_strategy)
-
-            if(is.null(private$ci_df)) {
-                bm = private$start_bm("Producing data-frame")
-                private$ci_df = calculate_matrices_ci(private$split_coverages,
-                                                      private$ph$get('sample_count'), 
-                                                      private$ph$get('alpha'),
-                                                      private$ph$get('resampling_strategy'),
-                                                      private$parallel_job)
-                private$stop_bm(bm)
-            }
-            
-            invisible(private$ci_df)
-        },
-        add_metadata = function(design_metadata=NA) {
-            # Make sure the previous steps have been completed.
-            self$calculate_ci()
-            private$update_params_and_invalidate_caches(design_metadata)
-                                                    
-            if(is.null(private$ci_meta_df)) {
-                filtered_design = private$ph$get("design_metadata")[private$ph$get("design_filter"),, drop=FALSE]
-                private$ci_meta_df = add_metadata_to_ci(private$ci_df,
-                                                        private$split_metadata_cache,
-                                                        filtered_design)
-            }
-            
-            invisible(private$ci_meta_df)
-        },
-        plot = function(region_names = NULL, design_names = NULL, title = NULL,
-                        x_label = NULL, facet_by=NULL, group_by=NULL) {
-            # 1. Get the correctly formatted table
-            self$add_metadata()
-
-            df <- self$get_data_frame(region_names, design_names)
-            
-            # 3. Produce the graph
-            if (is.null(title)) {
-                title <- paste(unique(private$df[["group"]]), collapse=" vs ")
-            }
-            p <- private$plot_graphic(df = df, title = title, 
-                                        x_label = x_label, facet_by=facet_by, group_by=group_by)
-            print(p)
-            private$graph <- p
-            invisible(self)
-        },
-        export = function(bam_file, region, file) {
-            # TODO: Deprecate?
-            warning("export is deprecated")
-            # region <- private$regions[[region]]
-            # param <- Rsamtools::ScanBamParam(which = region)
-            # alignments <- GenomicAlignments::readGAlignments(bam_file,
-            #                                                     param = param)
-            # weight <- 1 - private$bam_handler$get_rpm_coefficient(bam_file)
-            # seqlevels(alignments) <- seqlevels(region)
-            # # TODO: don't use the weight param of coverage
-            # coverage <- GenomicAlignments::coverage(alignments, weight=weight)
-            # rtracklayer::export(get_normalized_coverages()[bam_file], file, "BED")
-            # invisible(coverage)
-        },
         group_coverages = function(design=NA, normalization=NA, noise_removal=NA, design_filter=NA) {
             # Clean up the design so it'll have the expected format.
             design = private$clean_design(design, private$ph$get("bam_files"))
@@ -435,12 +373,74 @@ metagene <- R6Class("metagene",
                 private$split_metadata_cache = split_res$Metadata
                 private$stop_bm(bm)                                         
             }
+        },        
+        calculate_ci = function(alpha=NA, sample_count=NA, resampling_strategy=NA) {
+            # Make sure the previous steps have been completed.
+            self$split_coverages_by_regions()
+            private$update_params_and_invalidate_caches(alpha, sample_count, resampling_strategy)
+
+            if(is.null(private$ci_df)) {
+                bm = private$start_bm("Producing data-frame")
+                private$ci_df = calculate_matrices_ci(private$split_coverages,
+                                                      private$ph$get('sample_count'), 
+                                                      private$ph$get('alpha'),
+                                                      private$ph$get('resampling_strategy'),
+                                                      private$parallel_job)
+                private$stop_bm(bm)
+            }
+            
+            invisible(private$ci_df)
+        },
+        add_metadata = function(design_metadata=NA) {
+            # Make sure the previous steps have been completed.
+            self$calculate_ci()
+            private$update_params_and_invalidate_caches(design_metadata)
+                                                    
+            if(is.null(private$ci_meta_df)) {
+                filtered_design = private$ph$get("design_metadata")[private$ph$get("design_filter"),, drop=FALSE]
+                private$ci_meta_df = add_metadata_to_ci(private$ci_df,
+                                                        private$split_metadata_cache,
+                                                        filtered_design)
+            }
+            
+            invisible(private$ci_meta_df)
+        },
+        plot = function(region_names = NULL, design_names = NULL, title = NULL,
+                        x_label = NULL, facet_by=NULL, group_by=NULL) {
+            # 1. Get the correctly formatted table
+            self$add_metadata()
+
+            df <- self$get_data_frame(region_names, design_names)
+            
+            # 3. Produce the graph
+            if (is.null(title)) {
+                title <- paste(unique(private$df[["group"]]), collapse=" vs ")
+            }
+            p <- private$plot_graphic(df = df, title = title, 
+                                        x_label = x_label, facet_by=facet_by, group_by=group_by)
+            print(p)
+            private$graph <- p
+            invisible(self)
         },
         produce_metagene = function(...) {
             private$update_params_and_invalidate_caches(...)
             self$plot()
             
             invisible(self)
+        },
+        export = function(bam_file, region, file) {
+            # TODO: Deprecate?
+            warning("export is deprecated")
+            # region <- private$regions[[region]]
+            # param <- Rsamtools::ScanBamParam(which = region)
+            # alignments <- GenomicAlignments::readGAlignments(bam_file,
+            #                                                     param = param)
+            # weight <- 1 - private$bam_handler$get_rpm_coefficient(bam_file)
+            # seqlevels(alignments) <- seqlevels(region)
+            # # TODO: don't use the weight param of coverage
+            # coverage <- GenomicAlignments::coverage(alignments, weight=weight)
+            # rtracklayer::export(get_normalized_coverages()[bam_file], file, "BED")
+            # invisible(coverage)
         }
     ),
     private = list(
@@ -838,63 +838,6 @@ metagene <- R6Class("metagene",
             
             private$print_verbose(paste0("BENCHMARK-TIME-", bm_obj$Message, ":", bm_time))
             private$print_verbose(paste0("BENCHMARK-MEMORY-", bm_obj$Message, ":", bm_mem))        
-        },
-        # Given a set of input matrices of binned coverages,
-        # determines where "gaps" in coverage are found.
-        #
-        # A bin is considered to be part of a gap if:
-        #  - There are less than min_below regions where the coverage for
-        #    this bin is above threshold, and
-        #  - There are at least min_width adjacent bins who also fulfill
-        #    the first criteria.
-        gap_detection = function(input_matrices, threshold=0, min_above=1, min_width=1) {
-            # Infer bin_count from first region/design combination.
-            bin_count = ncol(input_matrices[[1]][[1]]$input)
-            
-            # Determine the number of single regions above the threshold for 
-            # each region group/design combination.
-            n_region_above=matrix(0, ncol=bin_count, nrow=0)
-            for(region in names(input_matrices)) {
-                for(design in names(input_matrices[[region]])) {
-                    n_region_above = rbind(n_region_above, apply(input_matrices[[region]][[design]]$input > threshold, 2, sum))
-                }
-            }
-            
-            # Calculate which bins have enough regions above the threshold.
-            n_region_above_threshold = colSums(n_region_above)
-            bin_above = n_region_above_threshold > min_above
-            
-            # Determine which gaps are wide enough. 
-            logical_rle = Rle(bin_above)
-            gap_runs = (runLength(logical_rle) >= min_width) & !runValue(logical_rle)
-            
-            # Reset the logical markers to TRUE where gaps weren't wide enough.
-            runValue(logical_rle)[!gap_runs] = TRUE
-            
-            # Return gapped bins.
-            return(as.logical(!logical_rle))
-        },
-        # Given a set of input matrices of binned coverages, determine
-        # the location of gaps and excise those columns. See gap_detection
-        # for details on teh gap detection algorithm.
-        gap_removal = function(input_matrices, threshold=0, min_above=1, min_width=1) {
-            gaps = gap_detection(input_matrices, threshold, min_above, min_width)
-            
-            if(all(gaps)) {
-                warning("Nothing left after gap detection! Gap removal will not be performed.")
-                return(input_matrices)
-            }
-            
-            # Remove the gaps
-            results = list()
-            for(region in names(input_matrices)) {
-                results[[region]] = list()
-                for(design in names(input_matrices[[region]])) {
-                    results[[region]][[design]] = list(input=input_matrices[[region]][[design]]$input[,!gaps, drop=FALSE])
-                }
-            }
-        
-            return(results)
         },
         update_params_and_invalidate_caches = function(...) {
             # This prologue makes it possible to infer parameter names from the

@@ -1,5 +1,9 @@
+###############################################################################
+# Binning of contiguous regions (GRanges objects)                             #
+###############################################################################
+
 # Split a coverage object by its seqnames,
-# and calculate 
+# and calls get_view_means on each subset.
 get_subtable = function(coverages, gr, bcount) {
     grl <- split(gr, GenomeInfoDb::seqnames(gr))
     i <- vapply(grl, length, numeric(1)) > 0
@@ -7,6 +11,9 @@ get_subtable = function(coverages, gr, bcount) {
                         bcount = bcount, cov = coverages))
 }
 
+# Split the ranges within gr into bcount bins and returns 
+# the mean coverage for each bin in a matrix where each row
+# is a binned region, and each column is a bin.
 get_view_means = function(gr, bcount, cov) {
     chr <- unique(as.character(GenomeInfoDb::seqnames(gr)))
     gr <- unlist(tile(gr, n=bcount))
@@ -15,6 +22,10 @@ get_view_means = function(gr, bcount, cov) {
     viewMeans(views)
 }
 
+
+# Split coverage (an RleList) into bin_count bins over the specified 
+# regions (A GRanges object). Coverages for regions on the '-' strands
+# are then reversed.
 bin_contiguous_regions <- function(coverage, regions, bin_count) {
   m <-  matrix(get_subtable(coverage, regions, bin_count), ncol=bin_count, byrow=TRUE)
     
@@ -24,6 +35,11 @@ bin_contiguous_regions <- function(coverage, regions, bin_count) {
   
   m
 }
+
+
+###############################################################################
+# Binning of discontiguous regions (GRangesList objects)                      #
+###############################################################################
 
 ### Function copied and modified from GenomicFeatures::coverageByTranscript
 ### The original function accepted input on which coverage() could be called,
@@ -76,16 +92,28 @@ discontiguous_coverage <- function(cvg, transcripts)
     ans
 }
 
+# Bin one element from an RleList (x) into bin_count bins.
 bin_rle_list = function(x, bin_count) { 
     viewMeans(Views(x, breakInChunks(length(x), nchunk=bin_count)))
 }
 
+# Split coverage (an RleList) into bin_count bins over the specified 
+# regions (A GRangesList object).
 bin_discontiguous_regions <- function(coverage, regions, bin_count) {
     rle_list = discontiguous_coverage(coverage, regions)
     bin_list = lapply(rle_list, bin_rle_list, bin_count=bin_count)
     matrix(unlist(bin_list), ncol=bin_count, byrow=TRUE)
 }
 
+
+###############################################################################
+# Top-level binning functions to manage strand-specific coverage and          #
+# branching on the type of region (contiguous GRanges, or discontiguous       #
+# GRangesList                                                                 #
+###############################################################################
+
+# Call the right binning algorithm depending on the type of regions:
+# contiguous (GRanges) vs discontiguous (GRangesList).
 bin_region_coverages = function(coverages, regions, bin_count) {
     results = list()
     for(cov_name in names(coverages)) {
@@ -98,6 +126,8 @@ bin_region_coverages = function(coverages, regions, bin_count) {
     return(results)
 }
 
+# Given a list of stranded coverages (+, -, *), bin them into bin_count bins over
+# each element of regions.
 bin_coverages_s = function(coverages, regions, bin_count) {
     # In single_strand mode, we'll only have coverage info for the undefined strand.
     if(is.null(coverages[["+"]]) && is.null(coverages[["-"]])) {
@@ -133,6 +163,11 @@ bin_coverages_s = function(coverages, regions, bin_count) {
     }
 }
 
+###############################################################################
+# Grouping of multiple coverages (bam files) into single coverages.           #
+###############################################################################
+
+# Group coverages according to design.
 group_coverages_s = function(coverage_s, design, noise_removal, bam_handler=NULL) {
     if(is.null(coverage_s)) {
         results = NULL
@@ -147,6 +182,7 @@ group_coverages_s = function(coverage_s, design, noise_removal, bam_handler=NULL
     return(results)
 }
 
+# Perform noise-reduction using the NCIS method.
 remove_controls = function(coverages, design, bam_handler) {
     results <- list()
     for (design_name in colnames(design)[-1]) {
@@ -174,6 +210,8 @@ remove_controls = function(coverages, design, bam_handler) {
     results
 }
 
+# Merge multiple coverages within a coverage list according to the columns
+# of design.
 merge_chip = function(coverages, design) {
     result <- list()
     for (design_name in colnames(design)[-1]) {
@@ -182,6 +220,8 @@ merge_chip = function(coverages, design) {
     result
 }
 
+# Perform the "Reduce" operation on the elements of coverage which have
+# the value design_value in column design_name of the design data-frame.
 merge_reduce = function(coverages, design, design_name, design_value) {
     indices = design[[design_name]] == design_value
     bam_names <- design[indices, 1]
@@ -190,17 +230,13 @@ merge_reduce = function(coverages, design, design_name, design_value) {
          BamNames=bam_names)
 }
 
-split_matrix = function(input_matrix, split_indices) {
-    lapply(split_indices, function(indices) { input_matrix[indices,, drop=FALSE] })
-}
+###############################################################################
+# Splitting of coverages/regions based on region metadata                     #
+###############################################################################
 
-split_matrices = function(matrices, metadata, split_by) {
-    split_indices = split_by_metadata(metadata, split_by)
-    
-    res_matrices = lapply(matrices, split_matrix, split_indices=split_indices$Indices)
-    return(list(Matrices=res_matrices, Metadata=split_indices$Metadata))
-}
-
+# Given a metadata data-frame and a vector of column names (split_by),
+# builds a partition of rows based on all possible combinations
+# of the columns identified by split_by.
 split_by_metadata = function(metadata, split_by) {
     # Determine all possible values for the split_by columns.
     split_by_list = as.list(split_by)
@@ -246,6 +282,23 @@ split_by_metadata = function(metadata, split_by) {
     return(list(Indices=out_subsets, Metadata=new_metadata, Partition=partition))        
 }
 
+# Given a single matrix, split it according to the split_by columns of the metadata.
+split_matrix = function(input_matrix, split_indices) {
+    lapply(split_indices, function(indices) { input_matrix[indices,, drop=FALSE] })
+}
+
+# Given a list of matrices, split each one according to the split_by columns 
+# of the metadata.
+split_matrices = function(matrices, metadata, split_by) {
+    split_indices = split_by_metadata(metadata, split_by)
+    
+    res_matrices = lapply(matrices, split_matrix, split_indices=split_indices$Indices)
+    return(list(Matrices=res_matrices, Metadata=split_indices$Metadata))
+}
+
+# Given a GRange or GRangesList object, split it according to the split_by columns 
+# of the metadata. GRanges are converted to GRangesList, while GRangesList
+# are converted to a list of GRangesList objects.
 split_regions = function(regions, metadata, split_by) {
     split_indices = split_by_metadata(metadata, split_by)
 
