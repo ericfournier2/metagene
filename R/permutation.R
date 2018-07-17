@@ -37,6 +37,8 @@ calculate_matrix_ci = function(x, sample_count, alpha, reuse) {
     res
 }
 
+# Given a set of matrices (A two-level list, where the first level are designs, and the second level
+# are regions)
 calculate_matrices_ci = function(matrices, sample_count, alpha, resampling_mode, parallel_job=NULL) {
     # Get coverage matrices, and reformat them into a flat list
     # so each matrix can be processed in parralel.

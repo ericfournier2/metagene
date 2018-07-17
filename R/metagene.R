@@ -244,7 +244,9 @@ metagene <- R6Class("metagene",
             private$regions <- private$prepare_regions(regions, private$ph$get("region_mode"), region_metadata)
 
             # Parse bam files
-            private$coverages <- private$produce_coverages()    
+            bm = private$start_bm("Producing coverage")
+            private$coverages <- private$produce_coverages()
+            private$stop_bm(bm)            
         },
         get_bam_count = function(filename) {
             # Parameters validation are done by Bam_Handler object
