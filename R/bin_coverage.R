@@ -245,3 +245,20 @@ split_by_metadata = function(metadata, split_by) {
     # Return the results.
     return(list(Indices=out_subsets, Metadata=new_metadata, Partition=partition))        
 }
+
+split_regions = function(regions, metadata, split_by) {
+    split_indices = split_by_metadata(metadata, split_by)
+
+    out_regions=list()
+    for(split_name in names(split_indices$Indices)) {
+        out_regions[[split_name]] = regions[split_indices$Indices[[split_name]]]
+    }
+
+    # If we were splitting a GRanges, we can make this a GRangesList.
+    if(is(regions, "GRanges")) {
+        out_regions = GRangesList(out_regions)
+    }
+    
+    attr(out_regions, "split_metadata") = split_indices$Metadata
+    return(out_regions)
+}

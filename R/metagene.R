@@ -181,7 +181,6 @@ metagene <- R6Class("metagene",
             design_metadata = data.frame(design=default_design[,1])
             
             # Initialize parameter handler.
-            
             private$ph <- parameter_manager$new(
                 param_values=list(
                     design=default_design,
@@ -259,6 +258,11 @@ metagene <- R6Class("metagene",
         },
         get_regions = function() {
             return(private$regions)
+        },
+        get_split_regions = function() {
+            return(split_regions(private$regions,
+                                 private$region_metadata, 
+                                 private$ph$get("split_by")))
         },
         get_matrices = function() {
             return(private$split_coverage_cache)
@@ -891,43 +895,6 @@ metagene <- R6Class("metagene",
             }
         
             return(results)
-        },
-        split_regions = function(regions, region_metadata, split_by) {
-            # Determine all possible values for the split_by columns.
-            split_by_list = as.list(split_by)
-            names(split_by_list) = split_by
-            possible_values = lapply(split_by_list, function(x) {unique(region_metadata[[x]])})
-            
-            # Determine all possible combinations of the split_by column values.
-            combinations = expand.grid(possible_values)
-
-            # Split regions by iterating over value combinations.
-            out_regions=list()
-            new_metadata_list = list()
-            for(i in 1:nrow(combinations)) {
-                # Select the columns where all values match the current combination.
-                selected_subset = TRUE
-                for(j in 1:ncol(combinations)) {
-                    col_name = colnames(combinations)[j]
-                    col_value = combinations[i,j]
-                    selected_subset = selected_subset & (mcols(regions)[[col_name]] == col_value)
-                }
-                
-                # If at least oen region is selected, generate a name and assign it.
-                if(sum(selected_subset) > 0) {
-                    region_name = paste(combinations[i,], collapse=";")
-                    out_regions[[region_name]] = regions[selected_subset]
-                    
-                    # We'll store the combination values for later use.
-                    new_metadata_list[[region_name]] = combinations[i,]
-                }
-            }
-            
-            # Convert to a GRangesList and return the results.
-            out_regions = GRangesList(out_regions)
-            new_metadata=data.table::rbindlist(new_metadata_list, use.names=TRUE)
-            new_metadata$split_regions = names(new_metadata_list)
-            return(list(regions=out_regions, metadata=new_metadata))        
         },
         update_params_and_invalidate_caches = function(...) {
             # This prologue makes it possible to infer parameter names from the
