@@ -914,7 +914,6 @@ metagene <- R6Class("metagene",
             # Loop over all passed-in parameters.
             for(arg_index in 1:length(arg_list)) {
                 arg_name=names(arg_list)[arg_index]
-                cat("Analyzing ", arg_name, "\n")
                 # Determine if the parameter has changed from its last value.
                 if(do.call(private$ph$have_params_changed, arg_list[arg_index])) {
                     cat(arg_name, " has changed.\n")
