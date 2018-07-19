@@ -19,14 +19,18 @@ calculate_bin_ci = function(x, sample_count, alpha, sample_indices=NULL) {
 # of Matrix sample_count times and calculate confidence intervals of the means at level alpha.
 # The results are stored as a data-frame with the additional design and region columns.
 calculate_matrix_ci = function(x, sample_count, alpha, reuse) {
-    if(reuse) {
-        sample_indices = sample.int(nrow(x$Matrix), size=nrow(x$Matrix)*sample_count, replace=TRUE)
+    if(nrow(x$Matrix) > 1 && sample_count > 0) {
+        if(reuse) {
+            sample_indices = sample.int(nrow(x$Matrix), size=nrow(x$Matrix)*sample_count, replace=TRUE)
+        } else {
+            sample_indices = NULL
+        }
+        
+        # Resample and calculate CIs for all columns of the matrix.
+        res = t(apply(x$Matrix, 2, calculate_bin_ci, sample_count=sample_count, alpha=alpha, sample_indices=sample_indices))
     } else {
-        sample_indices = NULL
+        res = data.frame(value=as.vector(x$Matrix), qinf=as.numeric(NA), qsup=as.numeric(NA))
     }
-    
-    # Resample and calculate CIs for all columns of the matrix.
-    res = t(apply(x$Matrix, 2, calculate_bin_ci, sample_count=sample_count, alpha=alpha, sample_indices=sample_indices))
     
     # Format the resulting data-frame correctly.
     colnames(res) = c("value", "qinf", "qsup")
