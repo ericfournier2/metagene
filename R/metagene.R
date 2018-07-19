@@ -418,11 +418,9 @@ metagene <- R6Class("metagene",
             if (is.null(title)) {
                 title <- paste(unique(private$df[["group"]]), collapse=" vs ")
             }
-            p <- private$plot_graphic(df = df, title = title, 
+            private$graph <- private$plot_graphic(df = df, title = title, 
                                         x_label = x_label, facet_by=facet_by, group_by=group_by)
-            print(p)
-            private$graph <- p
-            invisible(self)
+            private$graph
         },
         produce_metagene = function(...) {
             private$update_params_and_invalidate_caches(...)
@@ -443,6 +441,38 @@ metagene <- R6Class("metagene",
             # coverage <- GenomicAlignments::coverage(alignments, weight=weight)
             # rtracklayer::export(get_normalized_coverages()[bam_file], file, "BED")
             # invisible(coverage)
+        },
+        plot_single_region = function(region_index, facet_by=NULL, group_by="design",
+                                      no_binning=FALSE) {
+            # Clone the mg object
+            single_mg = self$clone(deep=TRUE)
+            if(class(self$get_regions()) == "GRangesList") {
+                single_region = single_mg$get_regions()[[which(region_index)]]
+            } else {
+                single_region = single_mg$get_regions()[region_index]
+            }
+            
+            if(no_binning) {
+                bin_count = sum(width(single_region))
+            } else {
+                bin_count = private$ph$get("bin_count")
+            }
+            single_mg$bin_coverages(bin_count=bin_count, region_filter=region_index)
+            single_mg$split_coverages_by_regions(split_by="region_name")
+            out_plot = single_mg$plot(facet_by=facet_by, group_by=group_by)
+            
+            if(no_binning) {
+               out_plot <- out_plot + labs(x="Distance in nucleotides") 
+               if(length(single_region) > 1) {
+                   cumulative_width = 0
+                   for(i in width(single_region)) {
+                       cumulative_width = cumulative_width + i
+                       out_plot <- out_plot + geom_vline(xintercept=cumulative_width)
+                   }
+               }
+            }
+
+            out_plot
         }
     ),
     private = list(
