@@ -114,7 +114,7 @@ parameter_manager <- R6Class("parameter_manager",
         # To test for a single NA value, we first eliminate the obvious problem
         # cases (NULL, lists) before testing for NA directly.
         test_for_na = function(value) {
-            return(!(is.null(value) || is.list(value) || !is.na(value)))
+            return(!(is.null(value) || is.list(value) || is.language(value) || !is.na(value)))
         },
         validate_all = function() {
             for(param_name in names(private$parameter_values)) {

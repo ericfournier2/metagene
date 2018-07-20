@@ -354,7 +354,7 @@ metagene <- R6Class("metagene",
             if(is.null(private$binned_coverages)) {
                 bm = private$start_bm("Binning coverages")
                 private$binned_coverages = bin_coverages_s(private$grouped_coverages,
-                                                           regions=private$regions[private$ph$get("region_filter")],
+                                                           regions=private$select_regions(private$ph$get("region_filter")),
                                                            bin_count=private$ph$get("bin_count"))
                 private$stop_bm(bm)
             }
@@ -369,7 +369,7 @@ metagene <- R6Class("metagene",
             if(is.null(private$split_coverages)) {
                 bm = private$start_bm("Splitting coverages by region type")
                 split_res = split_matrices(private$binned_coverages,
-                                           private$region_metadata[private$ph$get("region_filter"),, drop=FALSE],
+                                           private$select_region_metadata(private$ph$get("region_filter")),
                                            private$ph$get('split_by'))
                 private$split_coverages = split_res$Matrices
                 private$split_metadata_cache = split_res$Metadata
@@ -442,36 +442,53 @@ metagene <- R6Class("metagene",
             # rtracklayer::export(get_normalized_coverages()[bam_file], file, "BED")
             # invisible(coverage)
         },
-        plot_single_region = function(region_index, facet_by=NULL, group_by="design",
+        plot_single_region = function(region, facet_by=NULL, group_by="design",
                                       no_binning=FALSE) {
             # Clone the mg object
             single_mg = self$clone(deep=TRUE)
+            
+            # Select the one region to plot, and make sure it ends up as a single GRange object.
+            single_region = private$select_regions(region)
+            stopifnot(length(single_region)==1)
             if(class(self$get_regions()) == "GRangesList") {
-                single_region = single_mg$get_regions()[[which(region_index)]]
-            } else {
-                single_region = single_mg$get_regions()[region_index]
+                single_region = single_region[[1]]
             }
             
+            # If we are skipping binning, make the number of bins equal
+            # the length in nucleotide.
             if(no_binning) {
                 bin_count = sum(width(single_region))
             } else {
                 bin_count = private$ph$get("bin_count")
             }
-            single_mg$bin_coverages(bin_count=bin_count, region_filter=region_index)
+            
+            # Re-bin with the new bin_count and the new filter.
+            single_mg$bin_coverages(bin_count=bin_count, region_filter=region)
+            
+            # With a single region, splitting cannot be applied, so
+            # we'll pass in a single row-name that we know to be valid.
             single_mg$split_coverages_by_regions(split_by="region_name")
+            
+            # Produce the new base single plot.
             out_plot = single_mg$plot(facet_by=facet_by, group_by=group_by)
             
+            # Adjust the plot if binning was skipped.
             if(no_binning) {
-               out_plot <- out_plot + labs(x="Distance in nucleotides") 
-               if(length(single_region) > 1) {
-                   cumulative_width = 0
-                   for(i in width(single_region)) {
-                       cumulative_width = cumulative_width + i
-                       out_plot <- out_plot + geom_vline(xintercept=cumulative_width)
-                   }
-               }
+                # New x label.
+                out_plot <- out_plot + labs(x="Distance in nucleotides") 
+                
+                # If dealing with a stitched region, display "exon" boundaries as.
+                # vertical lines.
+                if(length(single_region) > 1) {
+                    cumulative_width = 0
+                    for(i in width(single_region)) {
+                        cumulative_width = cumulative_width + i
+                        out_plot <- out_plot + geom_vline(xintercept=cumulative_width)
+                    }
+                }
             }
 
+            # Return the new plot.
             out_plot
         }
     ),
@@ -563,7 +580,11 @@ metagene <- R6Class("metagene",
             # In separate mode, simplify regions into a single GRanges object.
             if(region_mode=="separate") {
                 regions = unlist(regions, use.names=FALSE)
-                private$region_metadata = mcols(regions)
+            }
+
+            # Build metadata from the mcols of the given regions.
+            if(region_mode=="separate") {
+                mcol_metadata = mcols(regions)
             } else {
                 first_or_null = function(x) {
                     if(length(x)>0) {
@@ -572,8 +593,24 @@ metagene <- R6Class("metagene",
                         return(NULL)
                     }
                 }
-                private$region_metadata = do.call(rbind, lapply(regions, first_or_null))
+                mcol_metadata = do.call(rbind, lapply(regions, first_or_null))
+                rownames(mcol_metadata) = names(regions)
             }
+
+            # Merge the passed metadata object with the mcol metadata.
+            if(is.null(region_metadata)) {
+                private$region_metadata = region_metadata
+            } else {
+                stopifnot(nrow(region_metadata)==length(regions))
+                non_duplicate_columns = setdiff(colnames(mcol_metadata), colnames(region_metadata))
+                if(length(non_duplicate_columns) > 0) {
+                    private$region_metadata = cbind(region_metadata, mcol_metadata[,non_duplicate_columns, drop=F])
+                }
+            }
+            
+            if(!is.null(names(regions)) && is.null(rownames(private$region_metadata))) {
+                rownames(private$region_metadata) = names(regions)
+            }            
             
             return(regions)
         },
@@ -936,6 +973,32 @@ metagene <- R6Class("metagene",
             do.call(private$ph$update_params, arg_list)
             
             return(cache_invalidated)
-        }        
+        },
+        select_region_indices = function(selector) {
+            if("quosure" %in% class(selector)) {
+                # Using dplyr for this because I'm not comfortable enough with
+                # quosures.
+                selected_indices = as.data.frame(private$region_metadata) %>%
+                                       dplyr::mutate(METAGENE_IDX=1:n()) %>%
+                                       dplyr::filter(!! selector) %>%
+                                       dplyr::pull(METAGENE_IDX)
+            } else if(class(selector)=="character") {
+                if(!is.null(names(self$get_regions()))) {
+                    selected_indices = selector
+                } else {
+                    selected_indices = self$get_regions()$region_name %in% selector
+                }
+            } else if(is.numeric(selector) || is.logical(selector) || is.numeric(selector)) {
+                selected_indices = selector
+            }
+            
+            selected_indices
+        },
+        select_regions = function(selector) {
+            self$get_regions()[private$select_region_indices(selector)]
+        },
+        select_region_metadata = function(selector) {
+            private$region_metadata[private$select_region_indices(selector),, drop=F]
+        }
     )
 )
