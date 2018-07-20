@@ -294,11 +294,7 @@ metagene <- R6Class("metagene",
             return(results[region_subset & design_subset,,drop=F])
         },
         get_plot = function() {
-            if (is.character(private$graph)) {
-                NULL
-            } else {
-                private$graph
-            }
+            private$graph
         },
         get_raw_coverages = function(filenames = NULL) {
             if(!private$ph$get('strand_specific')) {
@@ -428,20 +424,6 @@ metagene <- R6Class("metagene",
             
             invisible(self)
         },
-        export = function(bam_file, region, file) {
-            # TODO: Deprecate?
-            warning("export is deprecated")
-            # region <- private$regions[[region]]
-            # param <- Rsamtools::ScanBamParam(which = region)
-            # alignments <- GenomicAlignments::readGAlignments(bam_file,
-            #                                                     param = param)
-            # weight <- 1 - private$bam_handler$get_rpm_coefficient(bam_file)
-            # seqlevels(alignments) <- seqlevels(region)
-            # # TODO: don't use the weight param of coverage
-            # coverage <- GenomicAlignments::coverage(alignments, weight=weight)
-            # rtracklayer::export(get_normalized_coverages()[bam_file], file, "BED")
-            # invisible(coverage)
-        },
         plot_single_region = function(region, facet_by=NULL, group_by="design",
                                       no_binning=FALSE) {
             # Clone the mg object
@@ -503,7 +485,7 @@ metagene <- R6Class("metagene",
         binned_coverages = NULL,
         split_coverages = NULL,
         df = NULL,
-        graph = "",
+        graph = NULL,
         bam_handler = "",
         parallel_job = "",
         ph=NULL,
