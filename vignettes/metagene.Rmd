@@ -172,7 +172,7 @@ By default, `metagene` aggregates all passed-in regions together, and treats all
 bam files separately. However, most non-trivial analyses will benefit from more
 granularity. Bam files can be split among different ChIP-seq experiments and/or
 multiple replicates. Regions can likewise be split according to multiple criteria: 
-is the underlying gene up or down regulated? Is the enhancer bound by a cofactor
+is the underlying gene up- or down-regulated? Is the enhancer bound by a cofactor
 of interest? Below, we discuss how `metagene` allows the user to specify those
 groupings to produce relevant analyses.
 
@@ -194,6 +194,9 @@ relates to the design group:
     + 1: input
     + 2: control
 
+A design group does not need to have a control, but it must have at least
+one input.    
+    
 ```{r design_definition}
 example_design <- data.frame(Samples = bam_files,
                              align1 = c(1,1,0,0,2),
@@ -211,7 +214,15 @@ mg$produce_metagene(design=example_design)
 ```    
 
 ### Using design metadata.
-Grouping bam files using an experimental design
+Grouping bam files using an experimental design aggregates all of 
+their coverages together, flattening them into a single mean value
+and its accompanying confidence interval. In some cases, it might be 
+preferable to keep all experimental replicates separate, and plot
+them next to each other to assess experimental reproducibility.
+
+`metagene` allows you to specify metadata to accompany your experimental
+design, and then allows you to plot your data accordingly:
+
 ```{r design_metadata}
 # Initializing the metagene object.
 mg <- metagene$new(regions = get_demo_regions(),
@@ -222,24 +233,36 @@ design_meta = data.frame(design=metagene$get_design_group_names(),
                          Align=c("Align1", "Align1", "Align2", "Align2"),
                          Rep=c(1, 2, 1, 2))
                              
-mg$produce_metagene(design_metadata=design_meta, facet_by=Align~Rep)
+mg$produce_metagene(design_metadata=design_meta, facet_by=Align~Rep, group_by="region")
 ```
 
 ## Grouping regions
 ### Grouping region using a GRangesList
 ### Grouping regions using metadata
 
-# Analysis steps
+# Further parameters
 
-A typical metagene analysis will consist steps:
+# Analysis steps and further parameters
 
-* Extraction the read count of every BAM files in selected regions.
-* Conversion in coverage.
-* Noise removal
-* Normalization of the coverage values.
-* Table production.
-* Data frame production.
-* Generation of the metagene plot.
+A full metagene analysis consists of seven steps. Calling the `new` and 
+`produce_metagene` methods automatically perform all of those steps 
+sequentially. However, if a full analysis is not required, it is also 
+possible to carry these out one by one. Carrying the steps separately
+can also make the `metagene`work flow easier to understand, and put
+the many available parameters into context. The seven steps are:
+
+* `metagene$new` extracts the coverages of every BAM files over the 
+  selected regions.
+* `group_coverages` normalizes the coverages, then groups them across 
+  design groups.
+* `bin_coverages` bins the coverages across the selected regions.
+* `split_coverages_by_regions` uses region metadata to split the
+  binned coverages into groups.
+* `calculate_ci` calculates the mean coverages of all region groups
+  across all design groups, as well as their confidence intervals.
+* `add_metadata` joins region and design metadata to the confidence 
+  intervals.
+* `plot` produces a plot.
 
 ## Minimal analysis
 
