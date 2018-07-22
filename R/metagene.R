@@ -258,6 +258,9 @@ metagene <- R6Class("metagene",
         get_design = function() {
             private$ph$get("design")
         },
+        get_design_group_names = function() {
+            private$get_design_names_internal(private$ph$get('design'))
+        }        
         get_regions = function() {
             return(private$regions)
         },
@@ -421,8 +424,6 @@ metagene <- R6Class("metagene",
         produce_metagene = function(...) {
             private$update_params_and_invalidate_caches(...)
             self$plot()
-            
-            invisible(self)
         },
         plot_single_region = function(region, facet_by=NULL, group_by="design",
                                       no_binning=FALSE) {
@@ -684,7 +685,7 @@ metagene <- R6Class("metagene",
             },
             logical(1)))
         },
-        get_design_names = function(design) {
+        get_design_names_internal = function(design) {
             if(is.null(design)) {
                 return(NULL)
             } else {
@@ -712,7 +713,7 @@ metagene <- R6Class("metagene",
             }        
         },
         get_bam_by_design = function(design) {
-            map(private$get_design_names(design), ~private$get_bam_in_design(design, .x))
+            map(private$get_design_names_internal(design), ~private$get_bam_in_design(design, .x))
         },
         get_coverage_names = function(coverages) {
             stopifnot(length(setdiff(names(coverages), c("+", "-", "*")))==0)
@@ -861,7 +862,6 @@ metagene <- R6Class("metagene",
             
             # Standardize names used in first column to match those
             # used in bam_files.
-
             design_bams = as.character(design[,1])
             design[,1] = design_bams
             if(all(design_bams %in% names(bam_files))) {

@@ -15,25 +15,24 @@ library(knitr)
 ```
 
 **Package**: `r Biocpkg("metagene")`<br />
-**Modified**: 18 september, 2015<br />
+**Modified**: July 20th, 2018<br />
 **Compiled**: `r date()`<br />
 **License**: `r packageDescription("metagene")[["License"]]`<br />
 
 # Introduction
 
-This package produces metagene-like plots to compare the behavior of
-DNA-interacting proteins at selected groups of features. A typical analysis
-can be done in viscinity of transcription start sites (TSS) of genes or at any
-regions of interest (such as enhancers). Multiple combinations of group of
-features and/or group of bam files can be compared in a single analysis.
-Bootstraping analysis is used to compare the groups and locate regions with
-statistically different enrichment profiles. In order to increase the
-sensitivity of the analysis, alignment data is used instead of peaks produced
-with peak callers (i.e.: MACS2 or PICS). The metagene package uses bootstrap
-to obtain a better estimation of the mean enrichment and the confidence
-interval for every group of samples.
+This package produces metagene plots, which aggregate coverages from
+multiple sources (bam files) over multiple regions (genes, cofactor binding
+sites, etc.) to provide profiles of average coverage. They are useful for
+many different purposes, such as comparing the binding profiles of
+DNA-interacting proteins at selected groups of features. In a typical analysis,
+these features will be the transcription start sites (TSS) of genes, 
+transcription factor binding sites, or enhancer regions. Multiple combinations
+of groups of features and/or groups of bam files can be compared in a single analysis.
+The metagene package uses bootstrap analysis to provide an estimation
+of the mean enrichment and a confidence interval for each group of samples.
 
-This vignette will introduce all the main features of the metagene package.
+This vignette will introduce the main features of the metagene package.
 
 # Loading the metagene package
 
@@ -41,58 +40,102 @@ This vignette will introduce all the main features of the metagene package.
 library(metagene)
 ```
 
-# Inputs
+# Creating a metagene object
+
+`metagene` objects are used to perform all of the analysis steps necessary
+to produce metagene plots. Creating a `metagene` object requires only two 
+mandatory parameters: `bam_files`, which is the list of bam files from which
+coverages should be extracted, and `regions`, which is the list of regions
+over which said coverages are computed. We also recommend using the optionl 
+`assay` parameter, which can be one of `'chipseq'` or `'rnaseq'`, and will
+automatically set other optional parameters to convenient defaults.
+We discuss each of these arguments below.
+
+```{r minimalAnalysis}
+regions <- get_demo_regions()
+regions
+
+# For this demo, we have 2 samples (each with 2 replicates).
+bam_files <- get_demo_bam_files()
+bam_files
+
+# Initializing the metagene object.
+mg <- metagene$new(regions = regions, bam_files = bam_files, assay='chipseq')
+mg$get_bam_files()
+mg$get_regions()
+
+# Plotting
+mg$plot(title = "Demo metagene plot")
+```
 
 ## Alignment files (BAM files)
 
-There is no hard limit in the number of BAM files that can be included in an
-analysis (but with too many BAM files, memory may become an issue). BAM files
-must be indexed. For instance, if you use a file names `file.bam`, a file
-named `file.bam.bai` or `file.bai`must be present in the same directory.
+There is no hard limit on the number of BAM files that can be included in an
+analysis. However, large numbers of bam files might also require large amounts
+of memory. The provided bam files must be indexed. Thus, a file named `file.bam`,
+must have a file named `file.bam.bai` or `file.bai` living alongside itself in 
+its directory.
 
-The path (relative or absolute) to the BAM files must be in a vector:
+The path (relative or absolute) to the BAM files must be provided in a vector.
+If the vector is named, then those names will be used to refer to the bam files
+in subsequent steps. Otherwise, `metagene` will attempt to generate appropriate
+names.
+
 ```{r bamFiles}
+# If no names are provided for the bam files, metagene will create some.
 bam_files <- get_demo_bam_files()
-bam_files
-```
+mg <- metagene$new(regions = regions, bam_files = bam_files)
+mg$get_bam_files()
 
-For this demo, we have 2 samples (each with 2 replicates). It is also possible
-to use a named vector to add your own names to each BAM files:
-```{r namedBamFiles}
-named_bam_files <- bam_files
-names(named_bam_files) <- letters[seq_along(bam_files)]
-named_bam_files
+# Using named BAM files can simplify the use of the metagene helper functions and
+# the creation of the design.
+names(bam_files) = c("a1_1", "a1_2", "a2_1", "a2_2", "ctrl")
+mg <- metagene$new(regions = regions, bam_files = bam_files)
+mg$get_bam_files()
 ```
-
-Using named BAM files can simplify the use of the metagene helper functions and
-the creation of the design.
 
 ## Genomic regions
 
-### BED files
+The regions for the metagene analysis can be provided in one of three different formats:
+* `regions` can be a `character` vector, containing the paths to bed, narrowPeak, 
+  broadPeak or gtf files describing the regions to be used.
+* `regions` can be a `GRanges` or `GRangesList` object defining a set of
+  contiguous regions.
+* `regions` can also be a `GRangesList` where each element defines a
+  set of regions to be stitched together to be considered as a single
+  logical region.
 
-To compare custom regions of interest, it is possible to use a list of one or
-more BED files.
+### BED, narrowPeak, broadPeak and GTF files
+
+`metagene` can automatically import your regions of interest if they are already 
+defined in a file with one of the following formats:
+* [bed](https://genome.ucsc.edu/FAQ/FAQformat.html#format1)
+* [narrowPeak](https://genome.ucsc.edu/FAQ/FAQformat.html#format12)
+* [broadPeak](https://genome.ucsc.edu/FAQ/FAQformat.html#format13)
+* [gtf](https://genome.ucsc.edu/FAQ/FAQformat.html#format4)
+
+A file's extension will usually reflect the format it is stored in.
 
 ```{r regionsArgument}
 regions <- get_demo_regions()
 regions
 ```
 
-The name of the files (without the extension) will be used to name each groups.
+### GRanges or GRangesList objects for contiguous regions
 
-`metagene` also support the
-[narrowPeak](https://genome.ucsc.edu/FAQ/FAQformat.html#format12)
-and the [broadPeak](https://genome.ucsc.edu/FAQ/FAQformat.html#format13).
+As an alternative to a list of BED files, `GRanges` objects can be also used
+to define contiguous regions of interest. Each range defined within the `GRanges`
+object is treated separately from the others. `GRangesList` objects
+are also accepted, but they are automatically coerced into `GRanges`
+objects, and a column named `region_name` bearing the name of the list elements
+is added to the coerced `GRanges`.
 
-### GRanges or GRangesList objects - Regions
+```{r grangeslist_chipseq_demo}
+# TODO
+```
 
-As an alternative to a list of BED files, `GRanges` or `GRangesList` objects 
-can be used.
-
-### Available datasets
-
-Some common datasets are already available with the `metagene` package:
+Some common datasets are made available as `GRanges` directly from the 
+`metagene` package:
 
 * `promoters_hg19`
 * `promoters_hg18`
@@ -107,66 +150,84 @@ promoters_hg19
 For more details about each datasets, please refer to their documentation 
 (i.e.:`?promoters_hg19`).
 
-## Design groups
+### GRangesList objects for stitching regions
 
-A design group contains a set of BAM files that, when put together, represent
-a logical analysis. Furthermore, a design group contains the relationship
-between every BAM files present. Samples (with or without replicates) and
-controls can be assigned to a same design group. There can be as many groups
-as necessary. A BAM file can be assigned to more than one group.
+For certain types of analyses, it is useful to stitch together several 
+regions into one logical unit. This is the case in RNA-seq data, where
+exons are individual regions which make more sense when grouped together
+into a single transcript.
 
-To represent the relationship between every BAM files, design groups must have
-the following columns:
+For these cases, `regions` can be a `GRangesList` object where each element
+is one such logical region. One must also specify the `region_mode="stitch"`
+parameter when creating the new metagene object. When `assay='rnaseq'`, 
+`region_mode` is automatically set to `"stitch"`.
 
-* The list of paths to every BAM files related to an analysis.
-* One column per group of files (replicates and/or controls).
+```{r stitchmode}
+# TODO
+```
 
-There is two possible way to create design groups, by reading a file or by
-directly creating a design object in R.
+# Grouping regions and bam files
 
-### Design groups from a file
+By default, `metagene` aggregates all passed-in regions together, and treats all
+bam files separately. However, most non-trivial analyses will benefit from more
+granularity. Bam files can be split among different ChIP-seq experiments and/or
+multiple replicates. Regions can likewise be split according to multiple criteria: 
+is the underlying gene up or down regulated? Is the enhancer bound by a cofactor
+of interest? Below, we discuss how `metagene` allows the user to specify those
+groupings to produce relevant analyses.
 
-Design groups can be loaded into the metagene package by using a text file. As
-the relationship between BAM files as to be specified, the following columns
-are mandatory:
+## Grouping bam files
+### Using an experimental design
+In `metagene`, an experimental design is a set of design groups, each of which
+is defined as a set of "input" bam files and a set of "control" bam files.
+There is no limit to the number of design groups, though large number of
+design groups will require a proportionately large amount of memory. A 
+BAM file can be assigned to more than one group.
 
-* First column: The list of paths (absolute or relative) to every BAM files
-for all the design groups, the BAM filenames or the BAM names (if a named BAM.
-file was used).
-* Following columns: One column per design group (replicates and/or controls).
-The column can take only three values:
+The experimental design is expressed using a data-frame, where each row represents
+a bam file. The very first column of the data-frame must identify the bam files,
+using either their path or their names as specified in the `bam_files` argument.
+Each subsequent column then represents an individual design group. The column name
+defines the design group's name, and the column values determine how each bam file
+relates to the design group:
     + 0: ignore file
     + 1: input
     + 2: control
 
-The file must also contain a header. It is recommanded to use `Samples` for the
-name of the first column, but the value is not checked. The other columns in
-the design file will be used for naming design groups, and must be unique.
+```{r design_definition}
+example_design <- data.frame(Samples = bam_files,
+                             align1 = c(1,1,0,0,2),
+                             align2 = c(0,0,1,1,2))
+kable(example_design)
+```
+```{r design_plot}
+# Initializing the metagene object.
+mg <- metagene$new(regions = get_demo_regions(),
+                   bam_files = get_demo_bam_files(),
+                   assay='chipseq')
 
-```{r designFile}
-fileDesign <- system.file("extdata/design.txt", package="metagene")
-design <- read.table(fileDesign, header=TRUE, stringsAsFactors=FALSE)
-design$Samples <- paste(system.file("extdata", package="metagene"),
-                        design$Samples, sep="/")
-kable(design)
+# Plotting while grouping the bam files by design group
+mg$produce_metagene(design=example_design)
+```    
+
+### Using design metadata.
+Grouping bam files using an experimental design
+```{r design_metadata}
+# Initializing the metagene object.
+mg <- metagene$new(regions = get_demo_regions(),
+                   bam_files = get_demo_bam_files(),
+                   assay='chipseq')
+
+design_meta = data.frame(design=metagene$get_design_group_names(),
+                         Align=c("Align1", "Align1", "Align2", "Align2"),
+                         Rep=c(1, 2, 1, 2))
+                             
+mg$produce_metagene(design_metadata=design_meta, facet_by=Align~Rep)
 ```
 
-### Design groups from R
-
-It is not obligatory to use a design file, you can create the design
-`data.frame` using your prefered method (as long as the restrictions on the
-values mentioned previously are respected).
-
-For instance, the previous design data.frame could have been create directly
-in R:
-```{r alternateDesign}
-design <- data.frame(Samples = c("align1_rep1.bam", "align1_rep2.bam",
-                    "align2_rep1.bam", "align2_rep2.bam", "ctrl.bam"),
-                    align1 = c(1,1,0,0,2), align2 = c(0,0,1,1,2))
-design$Samples <- paste0(system.file("extdata", package="metagene"), "/",
-                        design$Samples)
-kable(design)
-```
+## Grouping regions
+### Grouping region using a GRangesList
+### Grouping regions using metadata
 
 # Analysis steps
 
