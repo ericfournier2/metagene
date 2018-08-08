@@ -204,7 +204,11 @@ metagene <- R6Class("metagene",
                     split_by="region_name",
                     region_filter=TRUE,
                     design_filter=TRUE,
-                    resampling_strategy="bin"),
+                    resampling_strategy="bin",
+                    facet_by=NULL,
+                    group_by=NULL,
+                    title=NULL,
+                    x_label=NULL),
                 param_validations=list(
                     design=private$validate_design,
                     bam_files=validate_bam_files,
@@ -260,7 +264,7 @@ metagene <- R6Class("metagene",
         },
         get_design_group_names = function() {
             private$get_design_names_internal(private$ph$get('design'))
-        }        
+        },        
         get_regions = function() {
             return(private$regions)
         },
@@ -406,19 +410,24 @@ metagene <- R6Class("metagene",
             
             invisible(private$ci_meta_df)
         },
-        plot = function(region_names = NULL, design_names = NULL, title = NULL,
-                        x_label = NULL, facet_by=NULL, group_by=NULL) {
+        plot = function(region_names = NULL, design_names = NULL, title = NA,
+                        x_label = NA, facet_by=NA, group_by=NA) {
             # 1. Get the correctly formatted table
             self$add_metadata()
 
+            private$update_params_and_invalidate_caches(title, x_label, facet_by, group_by)
+            
             df <- self$get_data_frame(region_names, design_names)
             
             # 3. Produce the graph
             if (is.null(title)) {
                 title <- paste(unique(private$df[["group"]]), collapse=" vs ")
             }
-            private$graph <- private$plot_graphic(df = df, title = title, 
-                                        x_label = x_label, facet_by=facet_by, group_by=group_by)
+            private$graph <- private$plot_graphic(df = df, 
+                                        title = private$ph$get("title"), 
+                                        x_label = private$ph$get("x_label"),
+                                        facet_by=private$ph$get("facet_by"),
+                                        group_by=private$ph$get("group_by"))
             private$graph
         },
         produce_metagene = function(...) {
@@ -582,7 +591,7 @@ metagene <- R6Class("metagene",
 
             # Merge the passed metadata object with the mcol metadata.
             if(is.null(region_metadata)) {
-                private$region_metadata = region_metadata
+                private$region_metadata = mcol_metadata
             } else {
                 stopifnot(nrow(region_metadata)==length(regions))
                 non_duplicate_columns = setdiff(colnames(mcol_metadata), colnames(region_metadata))
