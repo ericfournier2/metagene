@@ -18,9 +18,24 @@ get_demo_bam_files <- function() {
 #' 
 #' @examples
 #' regions <- get_demo_regions()
-get_demo_regions <- function() {
+get_demo_region_filenames <- function() {
     c(system.file("extdata/list1.bed", package="metagene"),
         system.file("extdata/list2.bed", package="metagene"))
+}
+
+#' Get demo regions
+#' 
+#' @return A vector of regions filenames
+#' 
+#' @examples
+#' regions <- get_demo_regions()
+get_demo_regions <- function() {
+    regions_list <- lapply(get_demo_region_filenames(), rtracklayer::import, format="bed")
+    regions_grl <- GRangesList(regions_list)
+    names(regions_grl) <-  gsub(".bed", "", basename(get_demo_region_filenames()))
+    
+    # We now have a named GRangesList with two set of 50 regions.
+    regions_grl    
 }
 
 #' Get a demo metagene object

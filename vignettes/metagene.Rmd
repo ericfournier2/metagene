@@ -237,8 +237,73 @@ mg$produce_metagene(design_metadata=design_meta, facet_by=Align~Rep, group_by="r
 ```
 
 ## Grouping regions
+The descriptive power of metagenes stem from their ability to succintly summarize
+coverage over groups of regions with shared characteristics. The `metagene` package 
+provides two options for grouping regions together: explicit grouping using a GRangesList
+object, or grouping using metadata.
+
 ### Grouping region using a GRangesList
+When working with separate, contiguous regions, the most straightforward way of 
+grouping regions together is to pass a GRangesList instead of a GRanges to metagene$new.
+Each element of the list then becomes a group of region that metagene aggregates together.
+The same behaviour is obtained if regions are specified through file names rather
+than GRanges objects.
+
+```{r design_metadata}
+# Create a GRangesList of regions to be grouped together.
+regions_list <- lapply(get_demo_regions(), rtracklayer::import, format="bed")
+regions_grl <- GRangesList(regions_list)
+names(regions_grl) <-  basename(get_demo_regions())
+
+# We now have a named GRangesList with two set of 50 regions.
+regions_grl
+lapply(regions_grl, length)
+
+
+# Initializing the metagene object.
+mg <- metagene$new(regions = regions_grl,
+                   bam_files = get_demo_bam_files(),
+                   assay='chipseq')
+
+# When plotting the final metagene, our regions are grouped according to
+# their membership in the initial GRangesList object.
+mg$plot(facet_by=~region, group_by="design")
+```
+
 ### Grouping regions using metadata
+A more powerful and flexible way of grouping regions is providing region
+metadata. This is done by using the region_metadata parameters, which must
+be a data-frame with as many rows as there are regions, and columns that 
+can be converted to factors. Once metadata has been attached to regions,
+they can be grouped using the group_regions_by parameter, which must be a
+vector of column names from the region_metadata parameter.
+
+By default, if no region_metadata is specified, `metagene` looks for the mcols
+attribute of the `GRanges` object, or the first line of each individual mcols
+of the `GRangesList` object.
+
+```
+# First, we load the regions.
+regions_gr <- unlist(get_demo_regions())
+
+# We then define some metadata.
+# The examples here are nonsensical. Real metadata could include factor
+# binding status, differential expression, etc.
+demo_metadata = data.frame(BedName=names(regions_gr),
+                           EvenStart=ifelse((start(regions_gr) %% 2) == 0, "Even", "Odd"),
+                           Strand=strand(regions_gr))
+head(demo_metadata)
+
+# Initializing the metagene object.
+mg <- metagene$new(regions = get_demo_regions(),
+                   region_metadata=demo_metadata,
+                   bam_files = get_demo_bam_files(),
+                   assay='chipseq')
+
+# When plotting the final metagene, our regions are grouped according to
+# their membership in the initial GRangesList object.
+mg$produce_metagene(split_by=c("EvenStart", "Strand"), facet_by=EvenStart~Strand, group_by="design")
+```
 
 # Further parameters
 
