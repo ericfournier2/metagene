@@ -279,8 +279,8 @@ they can be grouped using the group_regions_by parameter, which must be a
 vector of column names from the region_metadata parameter.
 
 By default, if no region_metadata is specified, `metagene` looks for the mcols
-attribute of the `GRanges` object, or the first line of each individual mcols
-of the `GRangesList` object.
+attribute of the `regions` parameter if it is a `GRanges` object, or the first 
+line of each individual mcols if it is a `GRangesList` object.
 
 ```
 # First, we load the regions.
@@ -294,7 +294,7 @@ demo_metadata = data.frame(BedName=names(regions_gr),
                            Strand=strand(regions_gr))
 head(demo_metadata)
 
-# Initializing the metagene object.
+# Initializing the metagene object, passing in region metadata.
 mg <- metagene$new(regions = get_demo_regions(),
                    region_metadata=demo_metadata,
                    bam_files = get_demo_bam_files(),
@@ -313,7 +313,7 @@ A full metagene analysis consists of seven steps. Calling the `new` and
 `produce_metagene` methods automatically perform all of those steps 
 sequentially. However, if a full analysis is not required, it is also 
 possible to carry these out one by one. Carrying the steps separately
-can also make the `metagene`work flow easier to understand, and put
+can also make the `metagene` work flow easier to understand, and put
 the many available parameters into context. The seven steps are:
 
 * `metagene$new` extracts the coverages of every BAM files over the 
@@ -329,83 +329,69 @@ the many available parameters into context. The seven steps are:
   intervals.
 * `plot` produces a plot.
 
-## Minimal analysis
+Below, we provide a short explanation of all of these steps, as well as
+a brief description of their most commonly used parameters. You can refer to 
+each function's formal documentation in the `metagene` manual for more details.
 
-A minimal metagene analysis can be performed in 2 steps:
+## metagene$new
+Initializing the metagene object calculates genome wide coverages for all 
+bam files, and performs some preprocessing on the regions of interest.
+* regions, 
+* bam_files, 
+* **assay** = 'chipseq',
+* **region_mode**="auto", 
 
-1. Initialization (the `new` function).
-2. `plot`
-```{r minimalAnalysis}
-regions <- get_demo_regions()
-bam_files <- get_demo_bam_files()
-# Initialization
-mg <- metagene$new(regions = regions, bam_files = bam_files)
-# Plotting
-mg$plot(title = "Demo metagene plot")
-```
-As you can see, it is not mandatory to explicitly call each step of the 
-metagene analysis. For instance, in the previous example, the `plot` function 
-call the other steps automatically with default values (the next section will 
-describe the steps in more details).
+* **padding_size**: The regions defined in `regions` will be padded by this 
+    many nucleotides at both ends.
+* **cores**: By passing an integer (the number of cores to use) or a 
+    `BiocParallelParam` object, this argument allows metagene to run certain 
+    operations in parallel.
+* **paired_end**: Setting this to true indicates that your bam files containing
+    paired_end data.
+ 
+* **strand_specific**: Set this to TRUE if you want reads on the opposite strand
+    to be discarded when calculating coverage.
+* **paired_end_strand_mode**: When `strand_specific` is TRUE, this flag determines
+    how read orientation should be interpreted. See the documentation for 
+    `GenomicAlignments:::readGAlignmentPairs` for the possible values.
 
-In this specific case, the plot is messy since by default
-`r Biocpkg("metagene")` will produce a curve for each possible combinations of
-BAM file and regions. Since we have `r length(bam_files)` BAM files and
-`r length(regions)` regions, this gives us
-`r length(bam_files) * length(regions)` curves.
+* region_metadata=NULL
 
-If we want more control on how every step of the analysis are performed, we
-have to call each functions directly.
+## group_coverages
 
-## Complete analysis
+This function groups bam file coverages into design group coverages, and performs
+normalization and noise removal when requested.
+* **design**:=NA,
+* **normalization**: This parameter determines how the coverages are normalized. There
+   are only two possible values: "RPM" (Reads per million) or NULL (No normalization).
+* **noise_removal**: This parameter determines whether coverage from control samples
+   should be subtracted from coverage of the input samples. There are only two possible
+    values: "NCIS" and NULL.
+* **design_filter**:=NA
 
-In order to fully control every step of a metagene analysis, it is important to
-understand how a complete analysis is performed. If we are satisfied with the
-default values, it is not mandatory to explicitly call every step (as was shown
-in the previous section).
+## bin_coverages
+* **bin_count**: Determines the number of bins regions will be divided into.
+* **region_filter**: 
 
-### Initialization
+## split_coverages_by_regions
+* **split_by**:
 
-During this step, the coverages for every regions specified are extracted from
-every BAM files. More specifically, a new `GRanges` is created by combining
-all the regions specified with the `regions` param of the `new` function.
-```{r initialization}
-regions <- get_demo_regions()
-bam_files <- get_demo_bam_files()
-mg <- metagene$new(regions = regions, bam_files = bam_files)
-```
+## calculate_ci
+* **alpha**: The alpha parameter for the confidence interval calculations.
+* **sample_count**: The number of resampling to be performed.
+* **resampling_strategy**: 
 
-### Producing the table
-To produce the table, coverages (produced from Genomics regions (.BED), 
-Alignment Files (.BAM) and Design Sheet) was treated for noise removal
-and normalized. Furthermore, to reduce the computation time during the 
-following steps, the positions are also binned. Regions, designs, bins, 
-associated values and orientation of strands are pulled into a data.table 
-called 'table' and accessible thanks to the getter `get_table`.
+## add_metadata
+* **design_metadata**:
 
-We can control the size of the bins with the `bin_count` argument. By
-default, a `bin_count` of 100 will be used during this step.
-
-```{r showProduceTable}
-mg$produce_table()
-```
-
-We can also use the design we produced earlier to remove background signal and
-combine replicates:
-```{r produceTableDesign}
-mg$produce_table(design = design)
-```
-
-### Producing the `data.frame`
-
-The metagene plot are produced using the `ggplot2` package, which require a
-`data.frame` as input. During this step, the values of the ribbon are
-calculated. Metagene uses "bootstrap" to obtain a better estimation of the
-mean of enrichment for every positions in each groups.
-```{r produceDataFrame}
-mg$produce_data_frame()
-```
-
+## plot
+* region_names = NULL, 
+* design_names = NULL, 
+* title = NA,
+* x_label = NA, 
+* facet_by=NA, 
+* group_by=NA
+                        
 ### Plotting
 
 During this step, metagene will use the `data.frame` to plot the calculated
@@ -425,34 +411,6 @@ mg$plot(region_names = "list1", title = "Demo plot subset")
 
 Multiple getters functions are available to access the data that is stored in a
 `metagene` object.
-
-### `get_table`
-To get the data.table containing regions, designs, bins, values at bins and 
-orientation of strands.
-```{r getTable}
-mg <- get_demo_metagene()
-mg$produce_table()
-mg$get_table()
-```
-
-### `get_matrices`
-To get the data.table as matrices (the former data structure)
-```{r getMatrices}
-mg <- get_demo_metagene()
-mg$produce_table()
-m <- mg$get_matrices()
-# m$list1$ctrl$input to access to region 'list1' and 'ctrl' design
-```
-
-### `get_data_frame`
-get_data_frame = function(region_names = NULL, design_names = NULL)
-To get the data.frame containing regions and design 
-```{r getDataFrame}
-mg <- get_demo_metagene()
-mg$produce_table()
-mg$produce_data_frame()
-mg$get_data_frame()
-```
 
 ### `get_params`
 
@@ -523,19 +481,6 @@ length(coverages)
 The `get_normalized_coverages` function works exactly like the
 `get_raw_coverages` function except that it returns the coverages in read per
 million aligned (RPM).
-
-## Chaining functions
-
-Every function of metagene (except for the getters) invisibly return a pointer
-to itself. This means that the functions can be chained:
-
-```{r showChain}
-rg <- get_demo_regions()
-bam <- get_demo_bam_files()
-d <- get_demo_design()
-title <- "Show chain"
-mg <- metagene$new(rg, bam)$produce_table(design = d)$plot(title = title)
-```
 
 ## Copying a metagene object
 
