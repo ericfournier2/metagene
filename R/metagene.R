@@ -166,7 +166,8 @@ metagene <- R6Class("metagene",
                                 force_seqlevels = FALSE, paired_end = FALSE,
                                 assay = 'chipseq', strand_specific=FALSE,
                                 paired_end_strand_mode=2,
-                                region_mode="auto", region_metadata=NULL, ...) {
+                                region_mode="auto", region_metadata=NULL, 
+                                extend_reads=0, ...) {
 
             # Validate the format of bam_files, since it is used to preprocess certain
             # parameters before initialization.
@@ -208,7 +209,8 @@ metagene <- R6Class("metagene",
                     facet_by=NULL,
                     group_by=NULL,
                     title=NULL,
-                    x_label=NULL),
+                    x_label=NULL,
+                    extend_reads=extend_reads),
                 param_validations=list(
                     design=private$validate_design,
                     bam_files=validate_bam_files,
@@ -240,7 +242,8 @@ metagene <- R6Class("metagene",
             private$bam_handler <- Bam_Handler$new(private$ph$get("bam_files") , cores = cores,
                                         paired_end = paired_end,
                                         strand_specific=strand_specific,
-                                        paired_end_strand_mode=paired_end_strand_mode)
+                                        paired_end_strand_mode=paired_end_strand_mode,
+                                        extend_reads=private$ph$get("extend_reads"))
             private$stop_bm(bm)
 
             # Prepare regions
