@@ -252,7 +252,8 @@ metagene <- R6Class("metagene",
                                 force_seqlevels = FALSE, paired_end = FALSE,
                                 assay = 'chipseq', strand_specific=FALSE,
                                 paired_end_strand_mode=2,
-                                region_mode="auto", region_metadata=NULL, ...) {
+                                region_mode="auto", region_metadata=NULL, 
+                                extend_reads=0, ...) {
 
             # Validate the format of bam_files, since it is used to preprocess certain
             # parameters before initialization.
@@ -294,7 +295,8 @@ metagene <- R6Class("metagene",
                     facet_by=NULL,
                     group_by=NULL,
                     title=NULL,
-                    x_label=NULL),
+                    x_label=NULL,
+                    extend_reads=extend_reads),
                 param_validations=list(
                     design=private$validate_design,
                     bam_files=validate_bam_files,
@@ -326,7 +328,8 @@ metagene <- R6Class("metagene",
             private$bam_handler <- Bam_Handler$new(private$ph$get("bam_files") , cores = cores,
                                         paired_end = paired_end,
                                         strand_specific=strand_specific,
-                                        paired_end_strand_mode=paired_end_strand_mode)
+                                        paired_end_strand_mode=paired_end_strand_mode,
+                                        extend_reads=private$ph$get("extend_reads"))
             private$stop_bm(bm)
 
             # Prepare regions
@@ -834,29 +837,43 @@ metagene <- R6Class("metagene",
         get_normalized_coverages_internal = function(filenames = NULL) {
             # Define a function which will normalize coverage for a single
             # BAM file.
-            normalize_coverage <- function(filename) {
-                count <- private$bam_handler$get_aligned_count(filename)
-                weight <- 1 / (count / 1000000)
-                for(strand in c("+", "-", "*")) {
-                    if(!is.null(coverages[[strand]])) {
-                        coverages[[strand]][[filename]] <- coverages[[strand]][[filename]] * weight
-                    }
-                }
+            normalize_coverage <- function(work_item) {
+                weight <- 1 / (work_item$Count / 1000000)
+                return(list(Strand=work_item$Strand, 
+                            BamFile=work_item$BamFile, 
+                            Coverage=work_item$Coverage * weight))
             }
             
             # Get the raw coverages.
             coverages <- private$get_raw_coverages_internal(filenames)
             
-            # Calculate normalized coverages in parallel.
-            coverage_names <- private$get_coverage_names(coverages)
-            private$parallel_job$launch_job(data = coverage_names,
-                                            FUN = normalize_coverage)
-            for(strand in c("+", "-", "*")) {                                                
+            # Serialize the workload
+            work_items = list()
+            for(strand in c("+", "-", "*")) {
                 if(!is.null(coverages[[strand]])) {
-                    names(coverages[[strand]]) <- coverage_names
+                    for(bam_file in names(coverages[[strand]])) {
+                        work_items[[length(work_items) + 1]] = list(Coverage=coverages[[strand]][[bam_file]],
+                                                                  Strand=strand,
+                                                                  BamFile=bam_file,
+                                                                  Count=private$bam_handler$get_aligned_count(bam_file))
+                    }
                 }
             }
-            coverages
+            
+            serialized_coverages <- private$parallel_job$launch_job(data = work_items,
+                                                                    FUN = normalize_coverage)
+                                                                    
+            # Deserialize the coverages.
+            norm_coverages = list("+"=NULL, "-"=NULL, "*"=NULL)
+            for(i in serialized_coverages) {
+                if(is.null(norm_coverages[[i$Strand]])) {
+                    norm_coverages[[i$Strand]] = list()
+                }
+                
+                norm_coverages[[i$Strand]][[i$BamFile]] = i$Coverage
+            }
+
+            norm_coverages
         },
         get_coverages_internal = function() {
             if (!is.null(private$ph$get("normalization"))) {

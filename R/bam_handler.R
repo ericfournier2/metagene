@@ -84,7 +84,7 @@ Bam_Handler <- R6Class("Bam_Handler",
         parameters = list(),
         initialize = function(bam_files, cores = SerialParam(), 
                               paired_end = FALSE, strand_specific=FALSE,
-                              paired_end_strand_mode=2) {
+                              paired_end_strand_mode=2, extend_reads=0) {
             # Check prerequisites
             # bam_files must be a vector of BAM filenames
             if (!is.vector(bam_files, "character")) {
@@ -132,6 +132,7 @@ Bam_Handler <- R6Class("Bam_Handler",
             self$parameters[["paired_end"]] <- paired_end
             self$parameters[["strand_specific"]] <- strand_specific
             self$parameters[["paired_end_strand_mode"]] <- paired_end_strand_mode
+            self$parameters[["extend_reads"]] <- extend_reads
             
             private$bam_files <- data.frame(bam = bam_files,
                                             stringsAsFactors = FALSE)
@@ -381,7 +382,7 @@ Bam_Handler <- R6Class("Bam_Handler",
         extract_coverage_by_regions = function(regions, bam_file, count=NULL, 
                                                paired_end = FALSE,
                                                strand_specific=FALSE,
-                                               paired_end_strand_mode=2){
+                                               paired_end_strand_mode=2, extend=0){
             if(!strand_specific) {
                 alignment = list('+'=NULL, '-'=NULL,
                                  '*'=private$read_alignments(regions, bam_file, paired_end=paired_end,
@@ -405,14 +406,18 @@ Bam_Handler <- R6Class("Bam_Handler",
                 weight <- 1
             }
             
-            weighted_coverage <- function(x) {
+            weighted_coverage <- function(x, extend) {
                 if(is.null(x)) {
                     return(x)
                 } else { 
-                    return(GenomicAlignments::coverage(x) * weight)
+                    if(extend==0) {
+                        return(GenomicAlignments::coverage(x) * weight)
+                    } else {
+                        return(GenomicRanges::coverage(GenomicRanges::resize(as(x, "GRanges"), width=extend, fix="start")) * weight)
+                    }
                 }
             }
-            return(lapply(alignment, weighted_coverage))
+            return(lapply(alignment, weighted_coverage, extend=extend))
         },
         generic_get_coverage = function(bam_file, regions, force_seqlevels = FALSE, count=NULL, simplify=TRUE) {
             private$check_bam_file(bam_file)
@@ -421,7 +426,8 @@ Bam_Handler <- R6Class("Bam_Handler",
             coverages = private$extract_coverage_by_regions(regions, bam_file, count,
                                 paired_end = self$parameters[['paired_end']],
                                 strand_specific = self$parameters[['strand_specific']],
-                                paired_end_strand_mode = self$parameters[['paired_end_strand_mode']])
+                                paired_end_strand_mode = self$parameters[['paired_end_strand_mode']],
+                                extend=self$parameters[['extend_reads']])
                                 
             if(simplify && !self$parameters[["strand_specific"]]) {
                 return(coverages[["*"]])
