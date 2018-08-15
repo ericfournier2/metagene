@@ -61,7 +61,7 @@ bam_files
 
 # Initializing the metagene object.
 mg <- metagene$new(regions = regions, bam_files = bam_files, assay='chipseq')
-mg$get_bam_files()
+mg$get_params()[["bam_files"]]
 mg$get_regions()
 
 # Plotting
@@ -85,13 +85,13 @@ names.
 # If no names are provided for the bam files, metagene will create some.
 bam_files <- get_demo_bam_files()
 mg <- metagene$new(regions = regions, bam_files = bam_files)
-mg$get_bam_files()
+mg$get_params()[["bam_files"]]
 
 # Using named BAM files can simplify the use of the metagene helper functions and
 # the creation of the design.
 names(bam_files) = c("a1_1", "a1_2", "a2_1", "a2_2", "ctrl")
 mg <- metagene$new(regions = regions, bam_files = bam_files)
-mg$get_bam_files()
+mg$get_params()[["bam_files"]]
 ```
 
 ## Genomic regions
@@ -226,10 +226,10 @@ design, and then allows you to plot your data accordingly:
 ```{r design_metadata}
 # Initializing the metagene object.
 mg <- metagene$new(regions = get_demo_regions(),
-                   bam_files = get_demo_bam_files(),
+                   bam_files = get_demo_bam_files()[1:4],
                    assay='chipseq')
 
-design_meta = data.frame(design=metagene$get_design_group_names(),
+design_meta = data.frame(design=mg$get_design_group_names(),
                          Align=c("Align1", "Align1", "Align2", "Align2"),
                          Rep=c(1, 2, 1, 2))
                              
@@ -249,7 +249,7 @@ Each element of the list then becomes a group of region that metagene aggregates
 The same behaviour is obtained if regions are specified through file names rather
 than GRanges objects.
 
-```{r design_metadata}
+```{r group_region_grangeslist}
 # Create a GRangesList of regions to be grouped together.
 regions_list <- lapply(get_demo_regions(), rtracklayer::import, format="bed")
 regions_grl <- GRangesList(regions_list)
