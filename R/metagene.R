@@ -265,7 +265,7 @@ metagene <- R6Class("metagene",
             
             # Define default design.
             default_design = private$get_complete_design(bam_files)
-            design_metadata = data.frame(design=default_design[,1])
+            design_metadata = data.frame(design=as.character(default_design[,1]), stringsAsFactors=FALSE)
             
             # Initialize parameter handler.
             private$ph <- parameter_manager$new(
@@ -506,13 +506,13 @@ metagene <- R6Class("metagene",
 
             private$update_params_and_invalidate_caches(title, x_label, facet_by, group_by)
             
-            df <- self$get_data_frame(region_names, design_names)
+            plot_df <- self$get_data_frame(region_names, design_names)
             
             # 3. Produce the graph
             if (is.null(title)) {
-                title <- paste(unique(private$df[["group"]]), collapse=" vs ")
+                title <- paste(unique(plot_df[["group"]]), collapse=" vs ")
             }
-            private$graph <- private$plot_graphic(df = df, 
+            private$graph <- private$plot_graphic(df = plot_df, 
                                         title = private$ph$get("title"), 
                                         x_label = private$ph$get("x_label"),
                                         facet_by=private$ph$get("facet_by"),
@@ -574,22 +574,28 @@ metagene <- R6Class("metagene",
         }
     ),
     private = list(
+        # Region information. Both are kept separate from the parameter
+        # handler since both can be very large, and making comparisons
+        # to see if they've changed would be onerous.
         regions = GRangesList(),
         region_metadata = NULL,
-        split_regions_cache = NULL,
-        split_metadata_cache = NULL,
-        design_metadata_cache=NULL,
+        
+        # Caches of intermediary step results.
         coverages = list(),
         grouped_coverages = NULL,
         binned_coverages = NULL,
         split_coverages = NULL,
-        df = NULL,
+        ci_df=NULL,
+        ci_meta_df=NULL,
         graph = NULL,
+
+        # Internal caches.
+        split_metadata_cache = NULL,
+
+        # Objects for handling bams, parameters and parallel jobs.
         bam_handler = "",
         parallel_job = "",
         ph=NULL,
-        ci_df=NULL,
-        ci_meta_df=NULL,
         
         print_verbose = function(to_print) {
             if (private$ph$get("verbose")) {
@@ -1045,17 +1051,18 @@ metagene <- R6Class("metagene",
             # Loop over all passed-in parameters.
             for(arg_index in 1:length(arg_list)) {
                 arg_name=names(arg_list)[arg_index]
+                
                 # Determine if the parameter has changed from its last value.
                 if(do.call(private$ph$have_params_changed, arg_list[arg_index])) {
-                    cat(arg_name, " has changed.\n")
+                    private$print_verbose(paste0(arg_name, " has changed.\n"))
+                    
                     # Determine which step the parameter belongs to.
                     invalidated_step = param_step_map[names(arg_list)[arg_index]]
                     if(!is.na(invalidated_step)) {
-                        
                         # Invalidate all caches for the step the parameter belonged to,
                         # as well as all caches for downsteam steps.
                         invalidated_caches = step_cache_map[1:which(names(step_cache_map)==invalidated_step)]
-                        cat(paste0(invalidated_caches, collapse=", "), " will be invalidated.\n")
+                        private$print_verbose(paste0(paste0(invalidated_caches, collapse=", "), " will be invalidated.\n"))
                         for(cache in invalidated_caches) {
                             private[[cache]] = NULL
                             cache_invalidated = TRUE

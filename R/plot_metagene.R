@@ -16,9 +16,6 @@
 plot_metagene <- function(df, facet_by=NULL, group_by=NULL) {
     df$design <- as.factor(df$design)
 
-    # if chipseq, for instance
-    message('Plot metagene')
-    
     expected_cols <- c("bin", "value", "qinf", "qsup", "group")
     assert_subset<-df[,which(colnames(df) %in% expected_cols)]
     expected_class <- c("integer", rep("numeric", 3), "factor")
