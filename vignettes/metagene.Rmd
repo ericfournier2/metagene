@@ -32,9 +32,8 @@ of groups of features and/or groups of bam files can be compared in a single ana
 The metagene package uses bootstrap analysis to provide an estimation
 of the mean enrichment and a confidence interval for each group of samples.
 
-This vignette will introduce the main features of the metagene package.
-
-# Loading the metagene package
+This vignette will introduce the main features of the metagene package. You can load 
+the metagene package by calling `library(metagene)`:
 
 ```{r libraryLoad, message = FALSE}
 library(metagene)
@@ -43,72 +42,78 @@ library(metagene)
 # Creating a metagene object
 
 `metagene` objects are used to perform all of the analysis steps necessary
-to produce metagene plots. Creating a `metagene` object requires only two 
+to produce metagene plots. Calling `metagene$new` creates a `metagene` object and requires only two 
 mandatory parameters: `bam_files`, which is the list of bam files from which
 coverages should be extracted, and `regions`, which is the list of regions
-over which said coverages are computed. We also recommend using the optionl 
+over which said coverages are computed. We also recommend using the optional 
 `assay` parameter, which can be one of `'chipseq'` or `'rnaseq'`, and will
 automatically set other optional parameters to convenient defaults.
 We discuss each of these arguments below.
 
 ```{r minimalAnalysis}
-regions <- get_demo_regions()
-regions
+# metagene objects are created by calling metagene$new and providing
+# regions and bam files:
+mg <- metagene$new(regions = get_demo_regions(), 
+                   bam_files = get_demo_bam_files(), 
+                   assay='chipseq')
 
-# For this demo, we have 2 samples (each with 2 replicates).
-bam_files <- get_demo_bam_files()
-bam_files
-
-# Initializing the metagene object.
-mg <- metagene$new(regions = regions, bam_files = bam_files, assay='chipseq')
-mg$get_params()[["bam_files"]]
-mg$get_regions()
-
-# Plotting
-mg$plot(title = "Demo metagene plot")
+# We can then plot coverage over those regions across all bam files.
+mg$produce_metagene(title = "Demo metagene plot")
 ```
 
-## Alignment files (BAM files)
+## Specifying alignment files (BAM files)
 
 There is no hard limit on the number of BAM files that can be included in an
-analysis. However, large numbers of bam files might also require large amounts
-of memory. The provided bam files must be indexed. Thus, a file named `file.bam`,
-must have a file named `file.bam.bai` or `file.bai` living alongside itself in 
-its directory.
+analysis. However, loading a large number of bam files might also require large amounts
+of memory. The provided bam files must be indexed: a file named `file.bam`,
+must have an accompanying `file.bam.bai` or `file.bai` in its directory.
 
-The path (relative or absolute) to the BAM files must be provided in a vector.
+The paths (relative or absolute) to the BAM files must be provided in a vector.
 If the vector is named, then those names will be used to refer to the bam files
 in subsequent steps. Otherwise, `metagene` will attempt to generate appropriate
 names.
 
-```{r bamFiles}
-# If no names are provided for the bam files, metagene will create some.
+```{r bamFiles_show}
+# We create a vector with paths to the bam files of interest.
 bam_files <- get_demo_bam_files()
-mg <- metagene$new(regions = regions, bam_files = bam_files)
-mg$get_params()[["bam_files"]]
+bam_files
+```
 
-# Using named BAM files can simplify the use of the metagene helper functions and
-# the creation of the design.
-names(bam_files) = c("a1_1", "a1_2", "a2_1", "a2_2", "ctrl")
-mg <- metagene$new(regions = regions, bam_files = bam_files)
+Each bam file must have a corresponding index file:
+```{r bamFiles_bai}
+# List .bai matching our specified bam files.
+Sys.glob(gsub(".bam", ".ba*", bam_files))
+```
+
+If no names were provided for the bam files, metagene automatically 
+generates some:
+```{r bamFiles_autoname}
+mg <- metagene$new(regions = get_demo_regions(), bam_files = bam_files)
 mg$get_params()[["bam_files"]]
 ```
 
-## Genomic regions
+We also could have explicitly named our bam files.
+```{r bamFiles_explicitname}
+names(bam_files) = c("a1_1", "a1_2", "a2_1", "a2_2", "ctrl")
+mg <- metagene$new(regions = get_demo_regions(), bam_files = bam_files)
+mg$get_params()[["bam_files"]]
+```
+
+## Specifying genomic regions
 
 The regions for the metagene analysis can be provided in one of three different formats:
-* `regions` can be a `character` vector, containing the paths to bed, narrowPeak, 
-  broadPeak or gtf files describing the regions to be used.
-* `regions` can be a `GRanges` or `GRangesList` object defining a set of
-  contiguous regions.
-* `regions` can also be a `GRangesList` where each element defines a
-  set of regions to be stitched together to be considered as a single
-  logical region.
 
-### BED, narrowPeak, broadPeak and GTF files
+* A `character` vector, containing the paths to bed, narrowPeak, broadPeak or gtf
+  files describing the regions to be used.
+* A `GRanges` or `GRangesList` object defining a set of  contiguous regions.
+* A `GRangesList` where each element defines a set of regions to be stitched 
+  together to be considered as a single logical region.
+
+### Defining regions using BED, narrowPeak, broadPeak and GTF files
 
 `metagene` can automatically import your regions of interest if they are already 
 defined in a file with one of the following formats:
+
 * [bed](https://genome.ucsc.edu/FAQ/FAQformat.html#format1)
 * [narrowPeak](https://genome.ucsc.edu/FAQ/FAQformat.html#format12)
 * [broadPeak](https://genome.ucsc.edu/FAQ/FAQformat.html#format13)
@@ -116,22 +121,39 @@ defined in a file with one of the following formats:
 
 A file's extension will usually reflect the format it is stored in.
 
-```{r regionsArgument}
-regions <- get_demo_regions()
+```{r regionsArgumentFilename}
+regions <- get_demo_region_filenames()
 regions
 ```
 
-### GRanges or GRangesList objects for contiguous regions
+By providing those to file names to `metagene$new`, they will be loaded 
+and converted into appropriate objects:
+```{r regionsArgumentFilenameLoad}
+mg <- metagene$new(regions = get_demo_region_filenames(),
+                   bam_files = get_demo_bam_files())
+mg$get_regions()
+```
+
+### Defining contiguous regions using GRanges or GRangesList objects
 
 As an alternative to a list of BED files, `GRanges` objects can be also used
 to define contiguous regions of interest. Each range defined within the `GRanges`
 object is treated separately from the others. `GRangesList` objects
 are also accepted, but they are automatically coerced into `GRanges`
 objects, and a column named `region_name` bearing the name of the list elements
-is added to the coerced `GRanges`.
+is added to the coerced `GRanges`. Here is an example of valid regions
+provided as a `GRangesList`:
 
-```{r grangeslist_chipseq_demo}
-# TODO
+```{r grangeslist_chipseq_regions}
+regions <- get_demo_regions()
+regions
+```
+
+When loaded by `metagene`, they are converted to a `GRanges`:
+```{r grangeslist_chipseq_load}
+mg <- metagene$new(regions = regions,
+                   bam_files = get_demo_bam_files())
+mg$get_regions()
 ```
 
 Some common datasets are made available as `GRanges` directly from the 
@@ -150,7 +172,7 @@ promoters_hg19
 For more details about each datasets, please refer to their documentation 
 (i.e.:`?promoters_hg19`).
 
-### GRangesList objects for stitching regions
+### GRangesList objects for stitching ranges together
 
 For certain types of analyses, it is useful to stitch together several 
 regions into one logical unit. This is the case in RNA-seq data, where
@@ -162,8 +184,18 @@ is one such logical region. One must also specify the `region_mode="stitch"`
 parameter when creating the new metagene object. When `assay='rnaseq'`, 
 `region_mode` is automatically set to `"stitch"`.
 
-```{r stitchmode}
-# TODO
+```{r demo_rna_regions}
+regions <- get_demo_rna_regions()
+regions
+```
+
+In stitch mode, the loaded regions remain in a `GRangesList`, rather than being coerced
+into a `GRanges`.
+```{r demo_stitch_mode}
+mg <- metagene$new(regions = regions,
+                   bam_files = get_demo_rna_bam_files(),
+                   region_mode="stitch")
+mg$get_regions()
 ```
 
 # Grouping regions and bam files
@@ -180,13 +212,13 @@ groupings to produce relevant analyses.
 ### Using an experimental design
 In `metagene`, an experimental design is a set of design groups, each of which
 is defined as a set of "input" bam files and a set of "control" bam files.
-There is no limit to the number of design groups, though large number of
+There is no limit to the number of design groups, though a large number of
 design groups will require a proportionately large amount of memory. A 
-BAM file can be assigned to more than one group.
+BAM file can be assigned to more than one design group.
 
 The experimental design is expressed using a data-frame, where each row represents
 a bam file. The very first column of the data-frame must identify the bam files,
-using either their path or their names as specified in the `bam_files` argument.
+using either their paths or their names as specified in the `bam_files` argument.
 Each subsequent column then represents an individual design group. The column name
 defines the design group's name, and the column values determine how each bam file
 relates to the design group:
@@ -213,7 +245,7 @@ mg <- metagene$new(regions = get_demo_regions(),
 mg$produce_metagene(design=example_design)
 ```    
 
-### Using design metadata.
+### Using design metadata
 Grouping bam files using an experimental design aggregates all of 
 their coverages together, flattening them into a single mean value
 and its accompanying confidence interval. In some cases, it might be 
@@ -242,7 +274,7 @@ coverage over groups of regions with shared characteristics. The `metagene` pack
 provides two options for grouping regions together: explicit grouping using a GRangesList
 object, or grouping using metadata.
 
-### Grouping region using a GRangesList
+### Grouping regions using a GRangesList
 When working with separate, contiguous regions, the most straightforward way of 
 grouping regions together is to pass a GRangesList instead of a GRanges to metagene$new.
 Each element of the list then becomes a group of region that metagene aggregates together.
@@ -251,14 +283,11 @@ than GRanges objects.
 
 ```{r group_region_grangeslist}
 # Create a GRangesList of regions to be grouped together.
-regions_list <- lapply(get_demo_regions(), rtracklayer::import, format="bed")
-regions_grl <- GRangesList(regions_list)
-names(regions_grl) <-  basename(get_demo_regions())
+regions_grl <- get_demo_regions()
 
 # We now have a named GRangesList with two set of 50 regions.
 regions_grl
 lapply(regions_grl, length)
-
 
 # Initializing the metagene object.
 mg <- metagene$new(regions = regions_grl,
@@ -272,17 +301,17 @@ mg$plot(facet_by=~region, group_by="design")
 
 ### Grouping regions using metadata
 A more powerful and flexible way of grouping regions is providing region
-metadata. This is done by using the region_metadata parameters, which must
-be a data-frame with as many rows as there are regions, and columns that 
+metadata. This is done by using the region_metadata parameter, which must
+be a data-frame with as many rows as there are regions and columns that 
 can be converted to factors. Once metadata has been attached to regions,
-they can be grouped using the group_regions_by parameter, which must be a
+they can be grouped using the split_by parameter, which must be a
 vector of column names from the region_metadata parameter.
 
 By default, if no region_metadata is specified, `metagene` looks for the mcols
 attribute of the `regions` parameter if it is a `GRanges` object, or the first 
 line of each individual mcols if it is a `GRangesList` object.
 
-```
+```{r group_region_metadata}
 # First, we load the regions.
 regions_gr <- unlist(get_demo_regions())
 
@@ -300,40 +329,58 @@ mg <- metagene$new(regions = get_demo_regions(),
                    bam_files = get_demo_bam_files(),
                    assay='chipseq')
 
-# When plotting the final metagene, our regions are grouped according to
-# their membership in the initial GRangesList object.
+# When plotting the metagene, our regions are grouped according to
+# the specified metadata columns.
 mg$produce_metagene(split_by=c("EvenStart", "Strand"), facet_by=EvenStart~Strand, group_by="design")
 ```
 
-# Further parameters
+# Intermediary processing steps and further parameters
 
-# Analysis steps and further parameters
-
-A full metagene analysis consists of seven steps. Calling the `new` and 
+A full metagene analysis consists of several steps, each of which
+produces an intermediary result of interest. Calling the `new` and 
 `produce_metagene` methods automatically perform all of those steps 
 sequentially. However, if a full analysis is not required, it is also 
-possible to carry these out one by one. Carrying the steps separately
-can also make the `metagene` work flow easier to understand, and put
-the many available parameters into context. The seven steps are:
+possible to carry these out one by one. The following schematic 
+illustrates those intermediate steps and results:
+![schematic representation of processing steps](img/processing_step_schema.png)
 
-* `metagene$new` extracts the coverages of every BAM files over the 
-  selected regions.
-* `group_coverages` normalizes the coverages, then groups them across 
-  design groups.
-* `bin_coverages` bins the coverages across the selected regions.
-* `split_coverages_by_regions` uses region metadata to split the
-  binned coverages into groups.
-* `calculate_ci` calculates the mean coverages of all region groups
-  across all design groups, as well as their confidence intervals.
-* `add_metadata` joins region and design metadata to the confidence 
-  intervals.
-* `plot` produces a plot.
+## Arguments, results caching and chaining
 
-Below, we provide a short explanation of all of these steps, as well as
+Objects of the `metagene` class are "pipeline" objects, whose primary purpose
+is to chain together the various steps required to produce a metagene plot
+and manage the parameters required to do so. As such, metagene maintains
+an internal list of all analytical parameters, which can be obtained by calling
+`get_params()`:
+
+```{r getParams}
+mg <- get_demo_metagene()
+mg$get_params()
+```
+
+Any of these parameters can be set when calling `metagene$new` or `produce_metagene`.
+```{r getParams}
+mg <- metagene$new(regions=get_demo_regions(), 
+                   bam_files=get_demo_bam_files(),
+                   bin_count=50)
+mg$produce_metagene(alpha=0.01, title="Set parameters on produce_metagene")
+```
+
+These parameter values can be overwritten in further calls to produce_metagene.
+When metagene detects that a parameter has changed, it invalidates only the 
+necessary caches, and updates the parameter value in its internal list.
+
+In the following example, we regenerate the previous metagene object by changing 
+the number of bins. Genome-wide coverages are not computed again, and our previous 
+alpha value and title remain the same.
+
+both `metagene$new` and 
+metagene$produce_metagene All parameters for metagene's intermediary steps default to NA
+
+Below, we provide a short explanation of all of the above steps, as well as
 a brief description of their most commonly used parameters. You can refer to 
 each function's formal documentation in the `metagene` manual for more details.
 
-## metagene$new
+## `metagene$new`
 Initializing the metagene object calculates genome wide coverages for all 
 bam files, and performs some preprocessing on the regions of interest.
 * regions, 
@@ -357,7 +404,7 @@ bam files, and performs some preprocessing on the regions of interest.
 
 * region_metadata=NULL
 
-## group_coverages
+## `group_coverages`
 
 This function groups bam file coverages into design group coverages, and performs
 normalization and noise removal when requested.
@@ -369,31 +416,22 @@ normalization and noise removal when requested.
     values: "NCIS" and NULL.
 * **design_filter**:=NA
 
-## bin_coverages
+## `bin_coverages`
 * **bin_count**: Determines the number of bins regions will be divided into.
 * **region_filter**: 
 
-## split_coverages_by_regions
+## `split_coverages_by_regions`
 * **split_by**:
 
-## calculate_ci
+## `calculate_ci`
 * **alpha**: The alpha parameter for the confidence interval calculations.
 * **sample_count**: The number of resampling to be performed.
 * **resampling_strategy**: 
 
-## add_metadata
+## `add_metadata`
 * **design_metadata**:
 
-## plot
-* region_names = NULL, 
-* design_names = NULL, 
-* title = NA,
-* x_label = NA, 
-* facet_by=NA, 
-* group_by=NA
-                        
-### Plotting
-
+## `plot`
 During this step, metagene will use the `data.frame` to plot the calculated
 values using `ggplot2`. We show a subset of the regions by using the 
 `region_names` and `design_names` parameter. The `region_names` correspond to 
@@ -401,9 +439,19 @@ the names of the regions used during the initialization. The `design_name`
 will vary depending if a design was added. If no design was added, this param 
 correspond to the BAM name or BAM filenames. Otherwise, we have to use the 
 names of the columns from the design.
+
+* **region_names** = NULL, 
+* **design_names** = NULL, 
+* **title** = NA,
+* **x_label** = NA, 
+* **facet_by**=NA, 
+* **group_by**=NA
+                        
 ```{r showPlot}
-mg$plot(region_names = "list1", title = "Demo plot subset")
+mg$plot(title = "Demo plot subset")
 ```
+
+## `produce_metagene`
 
 # Manipulating the `metagene` objects
 
@@ -414,9 +462,16 @@ Multiple getters functions are available to access the data that is stored in a
 
 ### `get_params`
 
-The various parameters used during the initialization of the `metagene` object,
-the production of the table and the production of the plot are saved and can
-be accessed with the `get_params` function:
+`metagene` keeps a list of all analysis parameters used to generate its plots
+and data structures. This list is initialized with reasonable defaults within the
+on metagene constructor, and is updated whenever a new parameter is specified in 
+`produce_metagene`, or any of the sub-processing steps (`group_coverages`, 
+`bin_coverages`, etc.). This list can be accessed with the `get_params` function.
+
+Most sub-processing steps accept NAs for their arguments' values: in those cases,
+metagene reuses the last specified value for this parameter, or a default
+one if the parameter has yet to be defined by the user.
+
 ```{r getParams}
 mg <- get_demo_metagene()
 mg$get_params()
@@ -424,36 +479,40 @@ mg$get_params()
 
 ### `get_design`
 
-To get the design that was used to produce the last version of the table,
-you can use the `get_design` function:
+While the metagene design is available through `get_params` in the same way as 
+all other parameters, a convenient `get_design` function allows us to retrieve
+it directly:
+
 ```{r getDesign}
-mg$produce_table(design = get_demo_design())
-## Alternatively, it is also possible to add a design without producing the
-## table:
-mg$add_design(get_demo_design())
+mg <- get_demo_metagene()
 mg$get_design()
 ```
 
 ### `get_bam_count`
 
-To get the number of aligned read in a BAM file, you can use the 
-`get_bam_count`
-function:
+To get the number of aligned reads in a BAM file, you can use the 
+`get_bam_count` function:
 ```{r getBamCount}
-mg$get_bam_count(bam_files[1])
+mg <- get_demo_metagene()
+mg$get_bam_count(mg$get_params()[["bam_files"]][1])
 ```
 
 ### `get_regions`
 
-To get all the regions, you can use the `get_regions` function:
+The `get_regions` function returns the post-processed regions that 
+`metagene` uses internally:
 ```{r getRegions}
-mg$get_regions()
-```
+# Out demo regions are a GRangesList of two elements containing 50 ranges each.
+get_demo_regions()
 
-It is also possible to extract a subset of the regions with the `get_regions`
-function:
-```{r getRegionsSubset}
-mg$get_regions(region_names = c(regions[1]))
+# When we initialize the metagene object, thsoe regions will be pre-processed,
+# flattening the list into a single GRanges object and adding a region_name`
+# column for tracking.
+mg <- metagene$new(regions = get_demo_regions(),
+                   bam_files = get_demo_bam_files())
+
+# get_regions allows us to see those post-processed regions.
+mg$get_regions()
 ```
 
 ### `get_raw_coverages`
@@ -468,7 +527,7 @@ coverages[[1]]
 length(coverages)
 ```
 
-It is also possible to extract a subset of all the coverages by providing the
+It is also possible to extract a subset of all the coverages by providing
 filenames:
 
 ```{r getRawCoveragesSubset}
@@ -482,99 +541,36 @@ The `get_normalized_coverages` function works exactly like the
 `get_raw_coverages` function except that it returns the coverages in read per
 million aligned (RPM).
 
-## Copying a metagene object
+## `clone`
 
-To copy a metagene object, you have to use the `clone` function:
+To copy a metagene object, you have to use the `clone` function. Note that
+certain elements of a metagene object are environments, and will be shared
+amongst metagene objects unless `deep=TRUE` is specified.
 
 ```{r copyMetagene}
-mg_copy <- mg$clone()
+mg_copy <- mg$clone(deep=TRUE)
 ```
 
 # Managing large datasets
 
-While `metagene` try to reduce it's memory usage, it's possible to run into
+While `metagene` tries to reduce its memory usage, it is possible to run into
 memory limits when working with multiple large datasets (especially when there
 is a lot of regions with a large width).
 
-One way to avoid this is to analyse each dataset seperately and then merge just
-before producing the metagene plot:
+One way to avoid this is to analyse each dataset seperately,  then merge the
+resulting data-frames before producing the metagene plot:
 
 ```{r memory, collapse=TRUE}
-mg1 <- metagene$new(bam_files = bam_files, regions = regions[1])
-mg1$produce_data_frame()
-mg2 <- metagene$new(bam_files = bam_files, regions = regions[2])
-mg2$produce_data_frame()
+#mg1 <- metagene$new(bam_files = bam_files, regions = regions[1])
+#mg1$produce_metagene()
+#mg2 <- metagene$new(bam_files = bam_files, regions = regions[2])
+#mg2$produce_metagene()
 ```
 
-Then you can extract the `data.frame`s and combine them with `rbind`:
-
-```{r extractDF}
-df1 <- mg1$get_data_frame()
-df2 <- mg2$get_data_frame()
-df <- rbind(df1, df2)
-```
-
-Finally, you can use the `plot_metagene` function to produce the metagene plot:
+Then you can extract the `data.frame`s and combine them with `rbind` before 
+Finally passing them to the `plot_metagene` function:
 
 ```{r plotMetagene}
-p <- plot_metagene(df)
-p + ggplot2::ggtitle("Managing large datasets")
-```
-
-# Comparing profiles with permutations
-
-It is possible to compare two metagene profiles using the `permutation_test`
-function provided with the `metagene` package. Please note that the permutation
-tests functionality is still in development and is expected to change in future
-releases.
-
-The first step is to decide which profiles we want to compare and extract the 
-corresponding tables :
-
-```{r extract_subtables}
-tab <- mg$get_table()
-tab0 <- tab[which(tab$region == "list1"),]
-tab1 <- tab0[which(tab0$design == "align1"),]
-tab2 <- tab0[which(tab0$design == "align2"),]
-```
-
-Then we defined to function to use to compare the two profiles. For this, a
-companion package of `metagene` named `r Biocpkg("similaRpeak")` provides
-multiple metrics.
-
-For this example, we will prepare a function to calculate the
-RATIO_NORMALIZED_INTERSECT between two profiles:
-
-```{r similaRpeak}
-library(similaRpeak)
-perm_fun <- function(profile1, profile2) {
-    sim <- similarity(profile1, profile2)
-    sim[["metrics"]][["RATIO_NORMALIZED_INTERSECT"]]
-}
-```
-
-We then compare our two profiles using this metric:
-
-```{r calculateRNI}
-ratio_normalized_intersect <- 
- perm_fun(tab1[, .(moy=mean(value)), by=bin]$moy, 
-        tab2[, .(moy=mean(value)), by=bin]$moy)
-ratio_normalized_intersect
-```
-
-To check if this value is significant, we can permute the two tables that
-were used to produce the profile and calculate their
-RATIO_NORMALIZED_INTERSECT:
-
-```{r permTest}
-permutation_results <- permutation_test(tab1, tab2, sample_size = 50,
-                                        sample_count = 1000, FUN = perm_fun)
-```
-
-Finally, we check how often the calculated value is greater than the results of
-the permutations:
-
-```{r perm_pval}
-sum(ratio_normalized_intersect >= permutation_results) / 
-                                length(permutation_results)
+#p <- plot_metagene(rbind(mg1$get_data_frame(), mg2$get_data_frame()))
+#p + ggplot2::ggtitle("Managing large datasets")
 ```

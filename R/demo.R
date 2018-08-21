@@ -12,6 +12,19 @@ get_demo_bam_files <- function() {
         system.file("extdata/ctrl.bam", package="metagene"))
 }
 
+#' Get BAM filenames for demo
+#' 
+#' @return A vector of BAM filenames
+#' 
+#' @examples
+#' bam_files <- get_demo_rna_bam_files()
+get_demo_rna_bam_files <- function() {
+    c(system.file("extdata/cyto4.bam", package="metagene"),
+                   system.file("extdata/cyto3.bam", package="metagene"),
+                   system.file("extdata/nuc4.bam", package="metagene"),
+                   system.file("extdata/nuc3.bam", package="metagene"))
+}
+
 #' Get regions filenames for demo
 #' 
 #' @return A vector of regions filenames
@@ -37,6 +50,24 @@ get_demo_regions <- function() {
     # We now have a named GRangesList with two set of 50 regions.
     regions_grl    
 }
+
+#' Get demo regions
+#' 
+#' @return A GRangesList with two genes
+#' 
+#' @examples
+#' regions <- get_demo_rna_regions()
+get_demo_rna_regions <- function() {
+    gene_files = c(system.file("extdata/DPM1.bed", package="metagene"),
+                   system.file("extdata/NDUFAB1.bed", package="metagene"))
+    regions_list <- lapply(gene_files, rtracklayer::import, format="bed")
+    regions_grl <- GRangesList(regions_list)
+    names(regions_grl) <- c("DPM1", "NDUFAB1")
+    
+    # We now have a named GRangesList with the exons for two genes.
+    regions_grl    
+}
+
 
 #' Get a demo metagene object
 #'
