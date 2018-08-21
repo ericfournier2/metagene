@@ -467,6 +467,8 @@ metagene <- R6Class("metagene",
                 private$split_metadata_cache = split_res$Metadata
                 private$stop_bm(bm)                                         
             }
+            
+            invisible(private$split_coverages)
         },        
         calculate_ci = function(alpha=NA, sample_count=NA, resampling_strategy=NA) {
             # Make sure the previous steps have been completed.

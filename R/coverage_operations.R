@@ -224,7 +224,7 @@ merge_chip = function(coverages, design) {
 # the value design_value in column design_name of the design data-frame.
 merge_reduce = function(coverages, design, design_name, design_value) {
     indices = design[[design_name]] == design_value
-    bam_names <- design[indices, 1]
+    bam_names <- rownames(design)[indices]
     
     list(Coverage=Reduce("+", coverages[bam_names]),
          BamNames=bam_names)
