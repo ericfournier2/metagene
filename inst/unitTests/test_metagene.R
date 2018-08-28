@@ -1536,3 +1536,41 @@ test.metagene_unflip_regions_previously_flipped <- function() {
  checkTrue(identical(tab1, tab2) == FALSE)
  checkTrue(identical(tab2, tab3) == TRUE)
 }
+
+test.metagene_replace_metadata <- function() {
+    regions_gr <- unlist(get_demo_regions())
+    demo_metadata = data.frame(BedName=names(regions_gr),
+                               EvenStart=ifelse((start(regions_gr) %% 2) == 0, "Even", "Odd"),
+                               Strand=strand(regions_gr))
+
+    mg <- metagene$new(regions = get_demo_regions(),
+                       region_metadata=demo_metadata,
+                       bam_files = get_demo_bam_files(),
+                       assay='chipseq')
+    
+    mg$produce_metagene(split_by=c("EvenStart", "Strand"))
+    test_meta = mg$get_regions_metadata()
+    
+    # Add column and replace. This should work fine.
+    test_meta$Foo = c("Foo", "Bar")
+    mg$replace_region_metadata(test_meta)
+
+    # Remove region_name column. It should be added back.
+    old_region_name = mg$get_regions_metadata()$region_name
+    test_meta = test_meta[setdiff(colnames(test_meta), "region_name")]
+    mg$replace_region_metadata(test_meta)
+    
+    checkTrue(all(mg$get_regions_metadata()$region_name==old_region_name))
+    
+    # Remove one of the split_by columns. Caches should be invalidated.
+    test_meta = test_meta[setdiff(colnames(test_meta), "EvenStart")]
+    mg$replace_region_metadata(test_meta)    
+    checkIdentical(mg$get_params()[["split_by"]], "region_name")
+    
+    # Try using a data-frame without enough rows. We should get an error message.
+    obs <- tryCatch(mg$replace_region_metadata(test_meta[1:4,]),
+                    error = conditionMessage)
+    exp <- "region_metadata must have one row per region."
+    checkIdentical(obs, exp)    
+    
+}

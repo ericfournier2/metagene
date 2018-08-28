@@ -357,6 +357,9 @@ metagene <- R6Class("metagene",
         get_regions = function() {
             return(private$regions)
         },
+        get_regions_metadata = function() {
+            return(private$region_metadata)
+        },
         get_split_regions = function() {
             return(split_regions(private$regions,
                                  private$region_metadata, 
@@ -573,6 +576,34 @@ metagene <- R6Class("metagene",
 
             # Return the new plot.
             out_plot
+        },
+        replace_region_metadata = function(region_metadata) {
+            # Validate that the old and new metadata have the same number of rows.
+            if(nrow(region_metadata)!=nrow(private$region_metadata)) {
+                stop("region_metadata must have one row per region.")
+            }
+            
+            # Make sure the region_name column is still present.
+            if(is.null(region_metadata$region_name)) {
+                warning("region_name is missing from the new metadata. Recreating it.")
+                region_metadata$region_name = private$region_metadata$region_name
+            }
+            
+            # Make sure that the split_by columns are all present and did not change.
+            # If they did, invalidate everything after split_by
+            for(split_column in private$ph$get("split_by")) {
+                if(is.null(region_metadata[[split_column]]) ||
+                   !all(region_metadata[[split_column]]==private$region_metadata[[split_column]])) {
+                    # The split_by columns were removed or changed. Restore the original parameter value.
+                    warning("Replace region_metadata with metadata which would result in a different ",
+                            "region split. All caches at the 'split_regions' step will be invalidated, ",
+                            "and split_by will be reset to its default value.")
+                    private$update_params_and_invalidate_caches(split_by="region_name")
+                }
+            }
+            
+            # Everything checks out, replace the metadata.
+            private$region_metadata = region_metadata
         }
     ),
     private = list(
