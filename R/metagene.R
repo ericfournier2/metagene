@@ -248,12 +248,12 @@ metagene <- R6Class("metagene",
     public = list(
     # Methods
         initialize = function(regions, bam_files, padding_size = 0,
-                                cores = SerialParam(), verbose = FALSE,
-                                force_seqlevels = FALSE, paired_end = FALSE,
-                                assay = 'chipseq', strand_specific=FALSE,
-                                paired_end_strand_mode=2,
-                                region_mode="auto", region_metadata=NULL, 
-                                extend_reads=0, ...) {
+                              cores = SerialParam(), verbose = FALSE,
+                              force_seqlevels = FALSE, paired_end = FALSE,
+                              assay = 'chipseq', strand_specific=FALSE,
+                              paired_end_strand_mode=2,
+                              region_mode="auto", region_metadata=NULL, 
+                              extend_reads=0, ...) {
 
             # Validate the format of bam_files, since it is used to preprocess certain
             # parameters before initialization.
@@ -355,14 +355,14 @@ metagene <- R6Class("metagene",
             private$get_design_names_internal(private$ph$get('design'))
         },        
         get_regions = function() {
-            return(private$regions)
+            return(private$ph$get("regions"))
         },
         get_regions_metadata = function() {
-            return(private$region_metadata)
+            return(private$ph$get("region_metadata"))
         },
         get_split_regions = function() {
-            return(split_regions(private$regions,
-                                 private$region_metadata, 
+            return(split_regions(private$ph$get("regions"),
+                                 private$ph$get("region_metadata"), 
                                  private$ph$get("split_by")))
         },
         get_matrices = function() {
@@ -413,6 +413,16 @@ metagene <- R6Class("metagene",
                                       gaps_threshold=NA, design_metadata=NA) {
             self$add_metadata()
             invisible(self)
+        },
+        produce_raw_coverages = function(regions=NA, region_metadata=NA, bam_files=NA) {
+            #if(!is.na(regions)) {
+            #    if(is.na(region_metadata)) {
+            #        region_metadata = private$region_metadata
+            #    }
+            #    private$regions <- private$prepare_regions(regions, private$ph$get("region_mode"), region_metadata)
+            #}
+            #
+            #if()
         },
         group_coverages = function(design=NA, normalization=NA, noise_removal=NA, design_filter=NA) {
             # Clean up the design so it'll have the expected format.
@@ -578,22 +588,24 @@ metagene <- R6Class("metagene",
             out_plot
         },
         replace_region_metadata = function(region_metadata) {
+            old_metadata = private$ph$get("region_metadata")
+        
             # Validate that the old and new metadata have the same number of rows.
-            if(nrow(region_metadata)!=nrow(private$region_metadata)) {
+            if(nrow(region_metadata)!=nrow(old_metadata)) {
                 stop("region_metadata must have one row per region.")
             }
             
             # Make sure the region_name column is still present.
             if(is.null(region_metadata$region_name)) {
                 warning("region_name is missing from the new metadata. Recreating it.")
-                region_metadata$region_name = private$region_metadata$region_name
+                region_metadata$region_name = old_metadata
             }
             
             # Make sure that the split_by columns are all present and did not change.
             # If they did, invalidate everything after split_by
             for(split_column in private$ph$get("split_by")) {
                 if(is.null(region_metadata[[split_column]]) ||
-                   !all(region_metadata[[split_column]]==private$region_metadata[[split_column]])) {
+                   !all(region_metadata[[split_column]]==old_metadata[[split_column]])) {
                     # The split_by columns were removed or changed. Restore the original parameter value.
                     warning("Replace region_metadata with metadata which would result in a different ",
                             "region split. All caches at the 'split_regions' step will be invalidated, ",
@@ -603,7 +615,10 @@ metagene <- R6Class("metagene",
             }
             
             # Everything checks out, replace the metadata.
-            private$region_metadata = region_metadata
+            private$ph$set("region_metadata", region_metadata)
+        },
+        produce_coverages = function(regions=NA, region_metadata=NA) {
+        
         }
     ),
     private = list(
@@ -702,6 +717,10 @@ metagene <- R6Class("metagene",
                 regions = unlist(regions, use.names=FALSE)
             }
 
+            
+            return(regions)
+        },
+        prepare_region_metadata = function(regions, region_mode, region_metadata) {
             # Build metadata from the mcols of the given regions.
             if(region_mode=="separate") {
                 mcol_metadata = mcols(regions)
@@ -719,26 +738,25 @@ metagene <- R6Class("metagene",
 
             # Merge the passed metadata object with the mcol metadata.
             if(is.null(region_metadata)) {
-                private$region_metadata = mcol_metadata
+                region_metadata = mcol_metadata
             } else {
                 stopifnot(nrow(region_metadata)==length(regions))
                 non_duplicate_columns = setdiff(colnames(mcol_metadata), colnames(region_metadata))
                 if(length(non_duplicate_columns) > 0) {
-                    private$region_metadata = cbind(region_metadata, mcol_metadata[,non_duplicate_columns, drop=F])
+                    private$ph$set("region_metadata", cbind(region_metadata, mcol_metadata[,non_duplicate_columns, drop=F]))
                 }
             }
             
-            if(!is.null(names(regions)) && is.null(rownames(private$region_metadata))) {
+            if(!is.null(names(regions)) && is.null(rownames(private$ph$get("region_metadata")))) {
                 rownames(private$region_metadata) = names(regions)
             }            
-            
-            return(regions)
+      
         },
         produce_coverages = function() {
             if(private$ph$get("region_mode")=="stitch") {
-                regions = BiocGenerics::unlist(private$regions)
+                regions = BiocGenerics::unlist(private$ph$get("regions"))
             } else {
-                regions = private$regions
+                regions = private$ph$get("regions")
             }
             
             regions <- GenomicRanges::reduce(regions)
