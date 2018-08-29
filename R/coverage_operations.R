@@ -29,7 +29,7 @@ get_view_means = function(gr, bcount, cov) {
 bin_contiguous_regions <- function(coverage, regions, bin_count) {
   m <-  matrix(get_subtable(coverage, regions, bin_count), ncol=bin_count, byrow=TRUE)
     
-  mr <- m[,bin_count:1]
+  mr <- m[,bin_count:1, drop=FALSE]
   i <-as.logical(strand(regions)=="-")
   m[i,] <- mr[i,]
   

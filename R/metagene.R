@@ -525,7 +525,7 @@ metagene <- R6Class("metagene",
             private$update_params_and_invalidate_caches(...)
             self$plot()
         },
-        plot_single_region = function(region, facet_by=NULL, group_by="design",
+        plot_single_region = function(region, facet_by=NA, group_by=NA,
                                       no_binning=FALSE) {
             # Clone the mg object
             single_mg = self$clone(deep=TRUE)
