@@ -6,7 +6,7 @@
 #'
 #' @section Constructor:
 #' \describe{
-#'    \item{}{\code{mg <- metagene$new(regions, bam_files, padding_size = 0,
+#'    \item{}{\code{mg <- metagene2$new(regions, bam_files, padding_size = 0,
 #'                                     cores = SerialParam(), verbose = FALSE,
 #'                                     force_seqlevels = FALSE, paired_end = FALSE,
 #'                                     assay = 'chipseq', strand_specific=FALSE,
@@ -85,12 +85,12 @@
 #'               for a list of possible parameters.}
 #' }
 #'
-#'    \code{metagene$new} returns a \code{metagene} object that contains the
+#'    \code{metagene2$new} returns a \code{metagene} object that contains the
 #'        coverages for every BAM files in the regions from the \code{regions}
 #'        param.
 #'
 #' @return
-#' \code{metagene$new} returns a \code{metagene} object which contains the
+#' \code{metagene2$new} returns a \code{metagene} object which contains the
 #' normalized coverage values for every regions in all specified BAM files.
 #'
 #' @section Methods:
@@ -234,9 +234,9 @@
 #' @examples
 #' region <- get_demo_regions()[1]
 #' bam_file <- get_demo_bam_files()[1]
-#' mg <- metagene$new(regions = region, bam_files = bam_file)
+#' mg <- metagene2$new(regions = region, bam_files = bam_file)
 #' \dontrun{
-#'    df <- metagene$plot()
+#'    df <- metagene2$plot()
 #' }
 #'
 #' @importFrom R6 R6Class
@@ -244,7 +244,7 @@
 #' @export
 #' @format A metagene experiment manager
 
-metagene <- R6Class("metagene",
+metagene2 <- R6Class("metagene",
     public = list(
     # Methods
         initialize = function(regions, bam_files, padding_size = 0,

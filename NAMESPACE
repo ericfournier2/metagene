@@ -1,4 +1,4 @@
-export(metagene)
+export(metagene2)
 export(get_demo_bam_files)
 export(get_demo_rna_bam_files)
 export(get_demo_regions)

@@ -1,5 +1,5 @@
 ---
-title: "metagene: a package to produce metagene plots"
+title: "metagene2: a package to produce metagene plots"
 output:
     BiocStyle::html_document:
         toc: true
@@ -29,11 +29,11 @@ DNA-interacting proteins at selected groups of features. In a typical analysis,
 these features will be the transcription start sites (TSS) of genes, 
 transcription factor binding sites, or enhancer regions. Multiple combinations
 of groups of features and/or groups of bam files can be compared in a single analysis.
-The metagene package uses bootstrap analysis to provide an estimation
+The metagene2 package uses bootstrap analysis to provide an estimation
 of the mean enrichment and a confidence interval for each group of samples.
 
-This vignette will introduce the main features of the metagene package. You can load 
-the metagene package by calling `library(metagene)`:
+This vignette will introduce the main features of the metagene2 package. You can load 
+the metagene2 package by calling `library(metagene)`:
 
 ```{r libraryLoad, message = FALSE}
 library(metagene)
@@ -42,7 +42,7 @@ library(metagene)
 # Creating a metagene object
 
 `metagene` objects are used to perform all of the analysis steps necessary
-to produce metagene plots. Calling `metagene$new` creates a `metagene` object and requires only two 
+to produce metagene plots. Calling `metagene2$new` creates a `metagene` object and requires only two 
 mandatory parameters: `bam_files`, which is the list of bam files from which
 coverages should be extracted, and `regions`, which is the list of regions
 over which said coverages are computed. We also recommend using the optional 
@@ -51,9 +51,9 @@ automatically set other optional parameters to convenient defaults.
 We discuss each of these arguments below.
 
 ```{r minimalAnalysis}
-# metagene objects are created by calling metagene$new and providing
+# metagene objects are created by calling metagene2$new and providing
 # regions and bam files:
-mg <- metagene$new(regions = get_demo_regions(), 
+mg <- metagene2$new(regions = get_demo_regions(), 
                    bam_files = get_demo_bam_files(), 
                    assay='chipseq')
 
@@ -88,14 +88,14 @@ Sys.glob(gsub(".bam", ".ba*", bam_files))
 If no names were provided for the bam files, metagene automatically 
 generates some:
 ```{r bamFiles_autoname}
-mg <- metagene$new(regions = get_demo_regions(), bam_files = bam_files)
+mg <- metagene2$new(regions = get_demo_regions(), bam_files = bam_files)
 mg$get_params()[["bam_files"]]
 ```
 
 We also could have explicitly named our bam files.
 ```{r bamFiles_explicitname}
 names(bam_files) = c("a1_1", "a1_2", "a2_1", "a2_2", "ctrl")
-mg <- metagene$new(regions = get_demo_regions(), bam_files = bam_files)
+mg <- metagene2$new(regions = get_demo_regions(), bam_files = bam_files)
 mg$get_params()[["bam_files"]]
 ```
 
@@ -126,10 +126,10 @@ regions <- get_demo_region_filenames()
 regions
 ```
 
-By providing those to file names to `metagene$new`, they will be loaded 
+By providing those to file names to `metagene2$new`, they will be loaded 
 and converted into appropriate objects:
 ```{r regionsArgumentFilenameLoad}
-mg <- metagene$new(regions = get_demo_region_filenames(),
+mg <- metagene2$new(regions = get_demo_region_filenames(),
                    bam_files = get_demo_bam_files())
 mg$get_regions()
 ```
@@ -151,7 +151,7 @@ regions
 
 When loaded by `metagene`, they are converted to a `GRanges`:
 ```{r grangeslist_chipseq_load}
-mg <- metagene$new(regions = regions,
+mg <- metagene2$new(regions = regions,
                    bam_files = get_demo_bam_files())
 mg$get_regions()
 ```
@@ -192,7 +192,7 @@ regions
 In stitch mode, the loaded regions remain in a `GRangesList`, rather than being coerced
 into a `GRanges`.
 ```{r demo_stitch_mode}
-mg <- metagene$new(regions = regions,
+mg <- metagene2$new(regions = regions,
                    bam_files = get_demo_rna_bam_files(),
                    region_mode="stitch")
 mg$get_regions()
@@ -237,7 +237,7 @@ kable(example_design)
 ```
 ```{r design_plot}
 # Initializing the metagene object.
-mg <- metagene$new(regions = get_demo_regions(),
+mg <- metagene2$new(regions = get_demo_regions(),
                    bam_files = get_demo_bam_files(),
                    assay='chipseq')
 
@@ -257,7 +257,7 @@ design, and then allows you to plot your data accordingly:
 
 ```{r design_metadata}
 # Initializing the metagene object.
-mg <- metagene$new(regions = get_demo_regions(),
+mg <- metagene2$new(regions = get_demo_regions(),
                    bam_files = get_demo_bam_files()[1:4],
                    assay='chipseq')
 
@@ -276,7 +276,7 @@ object, or grouping using metadata.
 
 ### Grouping regions using a GRangesList
 When working with separate, contiguous regions, the most straightforward way of 
-grouping regions together is to pass a GRangesList instead of a GRanges to metagene$new.
+grouping regions together is to pass a GRangesList instead of a GRanges to metagene2$new.
 Each element of the list then becomes a group of region that metagene aggregates together.
 The same behaviour is obtained if regions are specified through file names rather
 than GRanges objects.
@@ -290,7 +290,7 @@ regions_grl
 lapply(regions_grl, length)
 
 # Initializing the metagene object.
-mg <- metagene$new(regions = regions_grl,
+mg <- metagene2$new(regions = regions_grl,
                    bam_files = get_demo_bam_files(),
                    assay='chipseq')
 
@@ -324,7 +324,7 @@ demo_metadata = data.frame(BedName=names(regions_gr),
 head(demo_metadata)
 
 # Initializing the metagene object, passing in region metadata.
-mg <- metagene$new(regions = get_demo_regions(),
+mg <- metagene2$new(regions = get_demo_regions(),
                    region_metadata=demo_metadata,
                    bam_files = get_demo_bam_files(),
                    assay='chipseq')
@@ -357,9 +357,9 @@ mg <- get_demo_metagene()
 mg$get_params()
 ```
 
-Any of these parameters can be set when calling `metagene$new` or `produce_metagene`.
+Any of these parameters can be set when calling `metagene2$new` or `produce_metagene`.
 ```{r getParams}
-mg <- metagene$new(regions=get_demo_regions(), 
+mg <- metagene2$new(regions=get_demo_regions(), 
                    bam_files=get_demo_bam_files(),
                    bin_count=50)
 mg$produce_metagene(alpha=0.01, title="Set parameters on produce_metagene")
@@ -373,14 +373,14 @@ In the following example, we regenerate the previous metagene object by changing
 the number of bins. Genome-wide coverages are not computed again, and our previous 
 alpha value and title remain the same.
 
-both `metagene$new` and 
-metagene$produce_metagene All parameters for metagene's intermediary steps default to NA
+both `metagene2$new` and 
+metagene2$produce_metagene All parameters for metagene's intermediary steps default to NA
 
 Below, we provide a short explanation of all of the above steps, as well as
 a brief description of their most commonly used parameters. You can refer to 
 each function's formal documentation in the `metagene` manual for more details.
 
-## `metagene$new`
+## `metagene2$new`
 Initializing the metagene object calculates genome wide coverages for all 
 bam files, and performs some preprocessing on the regions of interest.
 * regions, 
@@ -508,7 +508,7 @@ get_demo_regions()
 # When we initialize the metagene object, thsoe regions will be pre-processed,
 # flattening the list into a single GRanges object and adding a region_name`
 # column for tracking.
-mg <- metagene$new(regions = get_demo_regions(),
+mg <- metagene2$new(regions = get_demo_regions(),
                    bam_files = get_demo_bam_files())
 
 # get_regions allows us to see those post-processed regions.
@@ -561,9 +561,9 @@ One way to avoid this is to analyse each dataset seperately,  then merge the
 resulting data-frames before producing the metagene plot:
 
 ```{r memory, collapse=TRUE}
-#mg1 <- metagene$new(bam_files = bam_files, regions = regions[1])
+#mg1 <- metagene2$new(bam_files = bam_files, regions = regions[1])
 #mg1$produce_metagene()
-#mg2 <- metagene$new(bam_files = bam_files, regions = regions[2])
+#mg2 <- metagene2$new(bam_files = bam_files, regions = regions[2])
 #mg2$produce_metagene()
 ```
 
