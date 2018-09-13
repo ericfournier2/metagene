@@ -750,7 +750,7 @@ metagene <- R6Class("metagene",
                         force_seqlevels= private$ph$get("force_seqlevels"),
                         simplify=FALSE)
 
-            names(res) <- names(bam_files)
+            #names(res) <- names(bam_files)
             
             # Turn res inside out so that strand is at the top level,
             # and bam files on the second.
@@ -935,7 +935,7 @@ metagene <- R6Class("metagene",
         
             # Check if used bam files exist.
             non_empty_rows = rowSums(design[, -1, drop=FALSE]) > 0
-            if (!all(purrr::map_lgl(design$Samples[non_empty_rows], private$check_bam_files))) {
+            if (!all(file.exists(as.character(design[non_empty_rows,1])))) {
                 warning("At least one BAM file does not exist")
             }
         },        
@@ -954,7 +954,7 @@ metagene <- R6Class("metagene",
             if(is.null(names(file_paths))) {
                 names(file_paths) = alt_names
             } else {
-                ifelse(names(file_paths)=="", alt_names, names(file_paths))
+                names(file_paths) = ifelse(names(file_paths)=="", alt_names, names(file_paths))
             }
             return(file_paths)
         },
@@ -1013,20 +1013,11 @@ metagene <- R6Class("metagene",
             
             # Standardize names used in first column to match those
             # used in bam_files.
-            design_bams = as.character(design[,1])
-            design[,1] = design_bams
-            if(all(design_bams %in% names(bam_files))) {
-                return(design)
-            } else {
-                inferred_names = names(private$name_from_path(design_bams))
-                if(all(inferred_names %in% names(bam_files))) {
-                    design[,1] = inferred_names
-                    warning("Modifying first column of design to match the names of bam_files rather than their file name.")
-                    return(design)
-                } else {
-                    stop("Design contains samples absent from the list of bam files provided on initialization.")
-                }
+            if(!all(as.character(design[,1]) %in% bam_files)) {
+                stop("Design contains samples absent from the list of bam files provided on initialization.")
             }
+
+            return(design)
         },
         start_bm = function(msg) {
             private$print_verbose(paste0(msg, "..."))

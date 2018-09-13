@@ -89,7 +89,9 @@ get_demo_metagene <- function() {
 #' mg <- get_demo_design()
 get_demo_design <- function() {
     file_design <- system.file("extdata/design.txt", package = "metagene")
-    read.table(file_design, header = TRUE, stringsAsFactors = FALSE)
+    return(data.frame(Samples = get_demo_bam_files(),
+                      align1 = c(1,1,0,0,2),
+                      align2 = c(0,0,1,1,2)))
 }
 
 get_not_indexed_bam_file <- function() {

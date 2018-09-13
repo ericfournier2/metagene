@@ -111,6 +111,7 @@ Bam_Handler <- R6Class("Bam_Handler",
             if (length(bam_names) != length(unique(bam_names))) {
                 stop("All BAM names must be unique")
             }
+            names(bam_files) = bam_names
             
             # Core must be a positive integer or a BiocParallelParam instance
             isBiocParallel = is(cores, "BiocParallelParam")
@@ -136,10 +137,7 @@ Bam_Handler <- R6Class("Bam_Handler",
             
             private$bam_files <- data.frame(bam = bam_files,
                                             stringsAsFactors = FALSE)
-            if (is.null(names(bam_files))) {
-                rownames(private$bam_files) <-
-                    file_path_sans_ext(basename(bam_files))
-            }
+
             private$bam_files[["aligned_count"]] <-
                 sapply(private$bam_files[["bam"]], private$get_file_count)
                 
