@@ -4,7 +4,7 @@
 
 if(FALSE) {
     library( "RUnit" )
-    library( "metagene" )
+    library( "metagene2" )
     library( "data.table" )
 }
 
@@ -13,8 +13,8 @@ if(FALSE) {
 bam_files <- get_demo_bam_files()
 named_bam_files <- bam_files
 names(named_bam_files) <- letters[1:(length(named_bam_files))]
-not_indexed_bam_file <- metagene:::get_not_indexed_bam_file()
-regions <- metagene:::get_demo_regions()
+not_indexed_bam_file <- metagene2:::get_not_indexed_bam_file()
+regions <- metagene2:::get_demo_regions()
 design <- data.frame(Samples = c("align1_rep1.bam", "align1_rep2.bam",
                     "align2_rep1.bam", "align2_rep2.bam", "ctrl.bam"),
                     align1 = c(1,1,0,0,2), align2 = c(0,0,1,1,2))
@@ -27,19 +27,19 @@ index_strand <- sample(1:length(regions_strand[[1]]),
                     round(length(regions_strand[[1]])/2))
 regions_strand <- lapply(regions_strand,
                         function(x) { strand(x[index_strand]) <- "-"; x })
-demo_mg <- metagene$new(regions = get_demo_regions(),
+demo_mg <- metagene2$new(regions = get_demo_regions(),
                         bam_files = get_demo_bam_files())
 region <- regions[1]
 bam_file <- bam_files[1]
-demo_mg_min <- metagene$new(regions = region, bam_files = bam_file)
+demo_mg_min <- metagene2$new(regions = region, bam_files = bam_file)
 
 ###################################################
-## Test the metagene$new() function (initialize)
+## Test the metagene2$new() function (initialize)
 ###################################################
 
 ## Invalid verbose value
 test.metagene_initialize_invalid_verbose_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             verbose = "ZOMBIES"),
                     error = conditionMessage)
@@ -49,7 +49,7 @@ test.metagene_initialize_invalid_verbose_value <- function() {
 
 ## Invalid force_seqlevels value
 test.metagene_initialize_invalid_force_seqlevels_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             force_seqlevels = "ZOMBIES"),
                     error = conditionMessage)
@@ -59,7 +59,7 @@ test.metagene_initialize_invalid_force_seqlevels_value <- function() {
 
 ## Negative padding_size value
 test.metagene_initialize_negative_padding_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             padding_size = -1),
                     error = conditionMessage)
@@ -69,7 +69,7 @@ test.metagene_initialize_negative_padding_value <- function() {
 
 ## Non-integer padding_size value
 test.metagene_initialize_invalid_string_padding_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             padding_size = "NEW_ZOMBIE"),
                     error = conditionMessage)
@@ -79,7 +79,7 @@ test.metagene_initialize_invalid_string_padding_value <- function() {
 
 ## Numerical padding_size value
 test.metagene_initialize_invalid_numerical_padding_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             padding_size = 1.2),
                     error = conditionMessage)
@@ -87,9 +87,9 @@ test.metagene_initialize_invalid_numerical_padding_value <- function() {
     checkIdentical(obs, exp)
 }
 
-## Negative padding_size value
+## Negative core value
 test.metagene_initialize_negative_padding_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             core = -1),
                     error = conditionMessage)
@@ -99,7 +99,7 @@ test.metagene_initialize_negative_padding_value <- function() {
 
 ## Non-integer core value
 test.metagene_initialize_invalid_string_core_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             core = "ZOMBIE2"),
                     error = conditionMessage)
@@ -109,7 +109,7 @@ test.metagene_initialize_invalid_string_core_value <- function() {
 
 ## Numerical core value
 test.metagene_initialize_invalid_numerical_core_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             core = 1.2),    
                     error = conditionMessage)
@@ -119,7 +119,7 @@ test.metagene_initialize_invalid_numerical_core_value <- function() {
 
 ## Zero core value
 test.metagene_initialize_invalid_zero_core_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = get_demo_bam_files(),
                                             core = 0),
                     error = conditionMessage)
@@ -129,7 +129,7 @@ test.metagene_initialize_invalid_zero_core_value <- function() {
 
 ## Non-character vector bam_files value
 test.metagene_initialize_invalid_num_vector_bam_files_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = c(2,4,3)),
                     error = conditionMessage)
     exp <- "bam_files must be a vector of BAM filenames."
@@ -139,15 +139,16 @@ test.metagene_initialize_invalid_num_vector_bam_files_value <- function() {
 ## Non-vector bam_files value
 test.metagene_initialize_invalid_list_bam_files_value <- function() {
     bam_files <- list(a = "ZOMBIE_01.txt", b = "ZOMBIE_02.txt")
-    obs <- tryCatch(metagene:::metagene$new(regions = get_demo_regions(),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
                                             bam_files = bam_files),
                     error = conditionMessage)
     exp <- "bam_files must be a vector of BAM filenames."
     checkIdentical(obs, exp)
 }
+
 # Not indexed bam in bam_files value
 test.metagene_initialize_invalid_no_index_bam_files_value <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = regions, bam_files = not_indexed_bam_file),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = regions, bam_files = not_indexed_bam_file),
                     error = conditionMessage)
     exp <- "All BAM files must be indexed"
     checkIdentical(obs, exp)
@@ -156,44 +157,45 @@ test.metagene_initialize_invalid_no_index_bam_files_value <- function() {
 # Multiple bam files, only one not indexed in bam_files value
 test.metagene_initialize_multiple_bam_file_one_not_indexed <- function() {
     bam_files <- c(bam_files, not_indexed_bam_file)
-    obs <- tryCatch(metagene:::metagene$new(regions = regions, bam_files = bam_files),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = regions, bam_files = bam_files),
                     error = conditionMessage)
     exp <- "All BAM files must be indexed"
     checkIdentical(obs, exp)
 }
 
-# not value for argument region
+# No value for regions argument 
 test.metagene_invalid_initialize_without_region_argument <- function() {
-    obs <- tryCatch(metagene:::metagene$new(bam_files = bam_files),
+    obs <- tryCatch(metagene2:::metagene2$new(bam_files = bam_files),
                     error = conditionMessage)
     exp <- 'argument "regions" is missing, with no default'
     checkIdentical(obs, exp)
 }
 
-# not value for argument region
+# No value for bam_files argument
 test.metagene_invalid_initialize_without_bam_files_argument <- function() {
-    obs <- tryCatch(metagene:::metagene$new(regions = regions),
+    obs <- tryCatch(metagene2:::metagene2$new(regions = regions),
                     error = conditionMessage)
     exp <- 'argument "bam_files" is missing, with no default'
     checkIdentical(obs, exp)
 }
 
-# Not valid object in region value
+# regions is the wrong class
 test.metagene_initialize_invalid_array_region_value <- function() {
     region <- array(data = NA, dim = c(2,2,2))
-    obs <- tryCatch(metagene:::metagene$new(bam_files = bam_files,
+    obs <- tryCatch(metagene2:::metagene2$new(bam_files = bam_files,
                                             region = region),
                     error = conditionMessage)
     exp <- paste0("regions must be either a vector of BED filenames, a ",
                 "GRanges object or a GrangesList object")
     checkIdentical(obs, exp)
 }
+
 # Valid regions with extra seqlevels
 test.metagene_initialize_valid_regions_supplementary_seqlevels <- function() {
     region <- rtracklayer::import(regions[1])
     GenomeInfoDb::seqlevels(region) <- c(GenomeInfoDb::seqlevels(region),
                                         "extra_seqlevels")
-    obs <- tryCatch(metagene$new(regions = region, bam_files = bam_files[1]),
+    obs <- tryCatch(metagene2$new(regions = region, bam_files = bam_files[1]),
                     error = conditionMessage)
     exp <- "Some seqlevels of regions are absent in bam_file"
     checkIdentical(obs, exp)
@@ -204,7 +206,7 @@ test.metagene_initialize_valid_regions_supplementary_seqlevels_force <- function
     region <- rtracklayer::import(regions[1])
     GenomeInfoDb::seqlevels(region) <- c(GenomeInfoDb::seqlevels(region),
                                         "extra_seqlevels")
-    obs <- tryCatch(mg <- metagene$new(regions = region, bam_files = bam_files[1],
+    obs <- tryCatch(mg <- metagene2$new(regions = region, bam_files = bam_files[1],
                 force_seqlevels = TRUE),
                     error = conditionMessage)
     checkIdentical(class(mg), c("metagene", "R6"))
@@ -214,7 +216,7 @@ test.metagene_initialize_valid_regions_supplementary_seqlevels_force <- function
 test.metagene_initialize_invalid_extra_seqnames <- function() {
     region <- rtracklayer::import(regions[1])
     GenomeInfoDb::seqlevels(region) <- "extra_seqlevels"
-    obs <- tryCatch(metagene$new(regions = region, bam_files = bam_files[1]),
+    obs <- tryCatch(metagene2$new(regions = region, bam_files = bam_files[1]),
                     error = conditionMessage)
     exp <- "Some seqlevels of regions are absent in bam_file"
     checkIdentical(obs, exp)
@@ -226,7 +228,7 @@ test.metagene_initialize_one_extra_seqnames_force_seqlevels <- function() {
     GenomeInfoDb::seqlevels(region) <- c(GenomeInfoDb::seqlevels(region),
                                         "extra_seqlevels")
     GenomeInfoDb::seqnames(region)[1] <- "extra_seqlevels"
-    mg <- tryCatch(metagene$new(regions = region, bam_files = bam_files[1],
+    mg <- tryCatch(metagene2$new(regions = region, bam_files = bam_files[1],
                                 force_seqlevels = TRUE),
                 error = conditionMessage)
     checkIdentical(class(mg), c("metagene", "R6"))
@@ -236,7 +238,7 @@ test.metagene_initialize_one_extra_seqnames_force_seqlevels <- function() {
 test.metagene_initialize_all_extra_seqnames_force_seqlevels <- function() {
     region <- rtracklayer::import(regions[1])
     GenomeInfoDb::seqlevels(region) <- "extra_seqlevels"
-    obs <- tryCatch(metagene$new(regions = region, bam_files = bam_files[1],
+    obs <- tryCatch(metagene2$new(regions = region, bam_files = bam_files[1],
                                 force_seqlevels = TRUE),
                     error = conditionMessage)
     exp <- "No seqlevels matching between regions and bam file"
@@ -245,8 +247,8 @@ test.metagene_initialize_all_extra_seqnames_force_seqlevels <- function() {
 
 # Valid regions narrowPeak
 test.metagene_initialize_valid_narrowpeak <- function() {
-    region <- metagene:::get_narrowpeak_region()
-    mg <- metagene$new(regions = region, bam_files = bam_files[1])
+    region <- metagene2:::get_narrowpeak_region()
+    mg <- metagene2$new(regions = region, bam_files = bam_files[1])
     obs <- mg$get_regions()$list1
     extraCols <- c(signalValue = "numeric", pValue = "numeric",
                 qValue = "numeric", peak = "integer")
@@ -256,8 +258,8 @@ test.metagene_initialize_valid_narrowpeak <- function() {
 
 # Valid regions broadPeak
 test.metagene_initialize_valid_broadpeak <- function() {
-    region <- metagene:::get_broadpeak_region()
-    mg <- metagene$new(regions = region, bam_files = bam_files[1])
+    region <- metagene2:::get_broadpeak_region()
+    mg <- metagene2$new(regions = region, bam_files = bam_files[1])
     obs <- mg$get_regions()$list1
     extraCols <- c(signalValue = "numeric", pValue = "numeric",
                 qValue = "numeric")
@@ -267,7 +269,7 @@ test.metagene_initialize_valid_broadpeak <- function() {
 
 # Valid named bam files
 test.metagene_initialize_valid_named_bam_files <- function() {
-    mg <- metagene$new(regions = regions[1], bam_files = named_bam_files[1])
+    mg <- metagene2$new(regions = regions[1], bam_files = named_bam_files[1])
     obs <- mg$get_params()[["bam_files"]]
     exp <- named_bam_files[1]
     checkIdentical(obs, exp)
@@ -278,7 +280,7 @@ test.metagene_initialize_valid_named_bam_files <- function() {
 
 # Valid unnamed bam files
 test.metagene_initialize_valid_unnamed_bam_files <- function() {
-    mg <- metagene$new(regions = regions[1], bam_files = bam_files[1])
+    mg <- metagene2$new(regions = regions[1], bam_files = bam_files[1])
     obs <- mg$get_params()[["bam_files"]]
     exp <- bam_files[1]
     names(exp) <- tools::file_path_sans_ext(basename(bam_files[1]))
@@ -288,63 +290,8 @@ test.metagene_initialize_valid_unnamed_bam_files <- function() {
     checkIdentical(obs, exp)
 }
 
-###################################################
-## Test the metagene$plot() function
-###################################################
-
-## Valid default
-#test.metagene_plot_default <- function() {
-#    mg <- demo_mg$clone(deep=TRUE)
-#    mg$produce_data_frame(sample_count = 10)
-#    pdf(NULL)
-#    mg$plot()
-#    dev.off()
-#    plot <- mg$get_plot()
-#    checkTrue(all(class(plot) == c("gg", "ggplot")))
-#}
-
-## Valid show_friedman false
-#test.metagene_plot_valid_show_friedman_false <- function() {
-#    mg <- demo_mg_min$clone()
-#    mg$produce_data_frame(sample_count = 10)
-#    pdf(NULL)
-#    mg$plot(show_friedman = FALSE)
-#    dev.off()
-#    plot <- mg$get_plot()
-#    checkTrue(all(class(plot) == c("gg", "ggplot")))
-#}
-
-## Valid show_friedman true
-#test.metagene_plot_valid_show_friedman_true <- function() {
-#    mg <- demo_mg_min$clone()
-#    mg$produce_data_frame(sample_count = 10)
-#    pdf(NULL)
-#    mg$plot(show_friedman = TRUE)
-#    dev.off()
-#    plot <- mg$get_plot()
-#    checkTrue(all(class(plot) == c("gg", "ggplot")))
-#}
-
-# ## Invalid show_friedman class
-# test.metagene_plot_invalid_show_friedman_class <- function() {
-    # mg <- demo_mg_min$clone()
-    # obs <- tryCatch(mg$plot(show_friedman = 1),
-                    # error = conditionMessage)
-    # exp <- "is.logical(show_friedman) is not TRUE"
-    # checkIdentical(obs, exp)
-# }
-
-# ## Invalid show_friedman length
-# test.metagene_plot_invalid_show_friedman_length <- function() {
-    # mg <- demo_mg_min$clone()
-    # obs <- tryCatch(mg$plot(show_friedman = c(TRUE, FALSE)),
-                    # error = conditionMessage)
-    # exp <- "length(show_friedman) == 1 is not TRUE"
-    # checkIdentical(obs, exp)
-# }
-
 ##################################################
-# Test the metagene$get_params() function
+# Test the metagene2$get_params() function
 ##################################################
 
 ## Valid usage
@@ -355,24 +302,23 @@ test.metagene_get_params_valid_usage <- function() {
     checkIdentical(params[["padding_size"]], 0)
     checkIdentical(params[["verbose"]], FALSE)
     checkIdentical(params[["force_seqlevels"]], FALSE)
-    checkIdentical(params[["flip_regions"]], FALSE)
 }
 
 ##################################################
-# Test the metagene$get_design() function
+# Test the metagene2$get_design() function
 ##################################################
 
 ## Valid usage
 test.metagene_get_design_valid_usage <- function() {
     mg <- demo_mg$clone(deep=TRUE)
-    mg$add_design(get_demo_design())
+    mg$group_coverages(design=get_demo_design())
     design <- mg$get_design()
     checkIdentical(mg$get_design()[,-1], get_demo_design()[,-1])
-    checkIdentical(mg$get_design()[,1], names(mg$get_params()[["bam_files"]]))
+    checkIdentical(mg$get_design()[,1], mg$get_params()[["bam_files"]])
 }
 
 ##################################################
-# Test the metagene$get_regions() function
+# Test the metagene2$get_regions() function
 ##################################################
 
 ## Valid usage default
@@ -381,105 +327,73 @@ test.metagene_get_regions_valid_usage_default <- function() {
     regions <- mg$get_regions()
     exp <- get_demo_regions()
     exp <- tools::file_path_sans_ext(basename(exp))
-    checkIdentical(names(regions), exp)
-}
-
-## Valid usage subset
-test.metagene_get_regions_valid_usage_subset <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    regions <- mg$get_regions(get_demo_regions()[1])
-    exp <- get_demo_regions()[1]
-    exp <- tools::file_path_sans_ext(basename(exp))
-    checkIdentical(names(regions), exp)
-}
-
-## Invalid usage region_names class
-test.metagene_get_regions_invalid_usage_region_names_class <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    obs <- tryCatch(mg$get_regions(1), error = conditionMessage)
-    exp <- "a character vector argument expected"
-    checkIdentical(obs, exp)
-}
-
-## Invalid usage region_names empty
-test.metagene_get_regions_invalid_usage_region_names_empty <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    obs <- tryCatch(mg$get_regions(""), error = conditionMessage)
-    exp <- "all(region_names %in% names(private$regions)) is not TRUE"
-    checkIdentical(obs, exp)
-}
-
-## Invalid usage region_names absent
-test.metagene_get_regions_invalid_usage_region_names_absent <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    obs <- tryCatch(mg$get_regions("not_valid_name"), error = conditionMessage)
-    exp <- "all(region_names %in% names(private$regions)) is not TRUE"
-    checkIdentical(obs, exp)
-}
-
-
-##################################################
-# Test the metagene$get_table() function
-##################################################
-
-## Valid usage default
-test.metagene_get_table_valid_usage_default <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg$produce_table()
- tab <- mg$get_table()
- checkTrue(is.data.frame(tab))
- checkTrue(dim(tab)[1] > 0)
- checkTrue(dim(tab)[2] == 5)
- checkIdentical(colnames(tab), c('region', 'design', 'bin', 'value', 'strand'))
-}
-
-## Valid usage without producing table before
-test.metagene_get_table_without_producing_table_before <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- tab <- mg$get_table()
- checkIdentical(tab, NULL)
-}
-
-## Valid usage get_table return by copy of table
-test.metagene_get_table_check_copy_of_table <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg$produce_table()
- tab <- mg$get_table()
- #modification of table by reference
- tab[,c := 1:5]
- #Is table copied and unchanged ? 
- tab2 <- mg$get_table()
- checkIdentical(ncol(tab) == ncol(tab2), FALSE)
+    checkIdentical(length(regions), length(unlist(get_demo_regions)))
+    region_1_in_regions = length(get_demo_regions()[[1]])
+    region_1_in_metagene = sum(regions$region_name==names(get_demo_regions())[1])
+    checkIdentical(region_1_in_regions, region_1_in_metagene)
 }
 
 ##################################################
-# Test the metagene$get_matrice() function
+# Test the metagene2$get_matrice() function
 ##################################################
 
-test.metagene_get_matrices_valid_usage_default = function(){
+test.metagene_group_coverages_valid_usage_default = function(){
     mg <- demo_mg$clone(deep=TRUE)
-    mg$produce_table()
-    m <- mg$get_matrices()
-    checkIdentical(dim(m$list1$align1_rep1$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list1$align1_rep2$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list1$align2_rep1$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list1$align2_rep2$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list1$ctrl$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list2$align1_rep1$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list2$align1_rep2$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list2$align2_rep1$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list2$align2_rep2$input) == c(50,100), c(TRUE,TRUE))
-    checkIdentical(dim(m$list2$ctrl$input) == c(50,100), c(TRUE,TRUE))
+    grouped_coverages = mg$group_coverages(design=get_demo_design())
+
+    check_identical(length(grouped_coverages), ncol(get_demo_design()) - 1)
+    
+    # Test values?
 }
 
-test.metagene_get_matrices_without_producing_table_before <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- m <- mg$get_matrices()
- checkIdentical(m, NULL)
+test.metagene_bin_coverages_valid_usage_default_design = function(){
+    mg <- demo_mg$clone(deep=TRUE)
+    mg$group_coverages()
+    binned_coverages = mg$bin_coverages()
+
+    design = mg$get_design()
+    check_identical(length(binned_coverages), ncol(design) - 1)
+    check_identical(names(binned_coverages), colnames(design)[-1])
+    for(i in 1:length(binned_coverages)) {
+        check_identical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
+        check_identical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
+    }
+    
+    # Test values?
+}
+
+test.metagene_bin_coverages_valid_usage_custom_design = function(){
+    mg <- demo_mg$clone(deep=TRUE)
+    mg$group_coverages(design=get_demo_design())
+    binned_coverages = mg$bin_coverages()
+
+    check_identical(length(binned_coverages), ncol(get_demo_design()) - 1)
+    check_identical(names(binned_coverages), colnames(get_demo_design())[-1])
+    for(i in 1:length(binned_coverages)) {
+        check_identical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
+        check_identical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
+    }
+    
+    # Test values?
+}
+
+test.metagene_split_coverages_valid_usage_default = function(){
+    mg <- demo_mg$clone(deep=TRUE)
+    mg$group_coverages(design=get_demo_design())
+    mg$split_coverages()
+
+    check_identical(length(binned_coverages), ncol(get_demo_design()) - 1)
+    check_identical(names(binned_coverages), colnames(get_demo_design())[-1])
+    for(i in 1:length(binned_coverages)) {
+        check_identical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
+        check_identical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
+    }
+    
+    # Test values?
 }
 
 ##################################################
-# Test the metagene$get_data_frame() function
+# Test the metagene2$get_data_frame() function
 ##################################################
 
 ## Valid usage default
@@ -622,7 +536,7 @@ test.metagene_get_data_frame_invalid_usage_design_names_absent <- function() {
 }
 
 ##################################################
-# Test the metagene$get_plot() function
+# Test the metagene2$get_plot() function
 ##################################################
 
 ## Valid case no graph
@@ -643,7 +557,7 @@ test.metagene_get_plot_valid_case_no_graph <- function() {
 #}
 
 ##################################################
-# Test the metagene$get_raw_coverages() function
+# Test the metagene2$get_raw_coverages() function
 ##################################################
 
 exp_raw <- GenomicAlignments::readGAlignments(bam_files[1])
@@ -722,7 +636,7 @@ test.metagene_get_raw_coverages_invalid_filename_among_valid <- function() {
 }
 
 ##################################################
-# Test the metagene$get_normalized_coverages() function
+# Test the metagene2$get_normalized_coverages() function
 ##################################################
 
 count <- Rsamtools::countBam(bam_files[1])$records
@@ -804,7 +718,7 @@ test.metagene_get_normalized_coverages_invalid_filename_among_valid <-
 }
 
 ##################################################
-# Test the metagene$add_design() function
+# Test the metagene2$add_design() function
 ##################################################
 
 ## Valid design data frame
@@ -951,7 +865,7 @@ test.metagene_add_design_invalid_bam_file_check_bam_files_false <- function() {
 }
 
 ##################################################
-# Test the metagene$produce_table() function
+# Test the metagene2$produce_table() function
 ##################################################
 
 test.metagene_produce_table_valid_without_design <- function() {
@@ -1367,7 +1281,7 @@ test.metagene_produce_table_valid_flip_regions_false <- function() {
 }
 
 ##################################################
-# Test the metagene$produce_data_frame() function
+# Test the metagene2$produce_data_frame() function
 ##################################################
 
 ## Valid default usage
@@ -1455,12 +1369,12 @@ test.metagene_produce_data_frame_invalid_sample_count_value <- function(){
 }
 
 ###################################################
-## Test the metagene$flip_regions() function
+## Test the metagene2$flip_regions() function
 ###################################################
 # TODO: Re-code later
 ## Valid case not previously flipped
 #test.metagene_flip_regions_not_previously_flipped <- function() {
-#    mg <- metagene:::metagene$new(bam_files = bam_files[1],
+#    mg <- metagene2:::metagene2$new(bam_files = bam_files[1],
 #                                regions = regions_strand)
 #    checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
 #    mg$produce_table()
@@ -1482,7 +1396,7 @@ test.metagene_produce_data_frame_invalid_sample_count_value <- function(){
 #
 ## Valid case previously flipped
 #test.metagene_flip_regions_previously_flipped <- function() {
-#    mg <- metagene:::metagene$new(bam_files = bam_files[1],
+#    mg <- metagene2:::metagene2$new(bam_files = bam_files[1],
 #                                regions = regions_strand)
 #    checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
 #    mg$produce_table(flip_regions = TRUE)
@@ -1497,12 +1411,12 @@ test.metagene_produce_data_frame_invalid_sample_count_value <- function(){
 #
 #
 ####################################################
-### Test the metagene$unflip_regions() function
+### Test the metagene2$unflip_regions() function
 ####################################################
 #
 ## Valid case not previously flipped
 test.metagene_unflip_regions_not_previously_flipped <- function() {
- mg <- metagene:::metagene$new(bam_files = bam_files[1],
+ mg <- metagene2:::metagene2$new(bam_files = bam_files[1],
                                 regions = regions_strand)
  checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
  mg$produce_table()
@@ -1517,7 +1431,7 @@ test.metagene_unflip_regions_not_previously_flipped <- function() {
 #
 ## Valid case previously flipped
 test.metagene_unflip_regions_previously_flipped <- function() {
- mg <- metagene:::metagene$new(bam_files = bam_files[1],
+ mg <- metagene2:::metagene2$new(bam_files = bam_files[1],
                                 regions = regions_strand)
  checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
  mg$produce_table(flip_regions = TRUE)
@@ -1543,7 +1457,7 @@ test.metagene_replace_metadata <- function() {
                                EvenStart=ifelse((start(regions_gr) %% 2) == 0, "Even", "Odd"),
                                Strand=strand(regions_gr))
 
-    mg <- metagene$new(regions = get_demo_regions(),
+    mg <- metagene2$new(regions = get_demo_regions(),
                        region_metadata=demo_metadata,
                        bam_files = get_demo_bam_files(),
                        assay='chipseq')
