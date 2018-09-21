@@ -6,6 +6,7 @@ if(FALSE) {
     library( "RUnit" )
     library( "metagene2" )
     library( "data.table" )
+    library( "dplyr" )
 }
 
 ### }}}
@@ -18,7 +19,7 @@ regions <- metagene2:::get_demo_regions()
 design <- data.frame(Samples = c("align1_rep1.bam", "align1_rep2.bam",
                     "align2_rep1.bam", "align2_rep2.bam", "ctrl.bam"),
                     align1 = c(1,1,0,0,2), align2 = c(0,0,1,1,2))
-design$Samples <- paste0(system.file("extdata", package = "metagene"), "/",
+design$Samples <- paste0(system.file("extdata", package = "metagene2"), "/",
                         design$Samples)
 regions_strand <- lapply(regions, rtracklayer::import)
 stopifnot(length(unique(vapply(regions, length, numeric(1)))) == 1)
@@ -32,6 +33,42 @@ demo_mg <- metagene2$new(regions = get_demo_regions(),
 region <- regions[1]
 bam_file <- bam_files[1]
 demo_mg_min <- metagene2$new(regions = region, bam_files = bam_file)
+
+# Load fake SAMs for value tests.
+fake_bam_files = system.file(c("fake_align1.bam", "fake_align2.bam", "fake_align3.bam"),
+                             package="metagene2")
+# Define a design that will test various combinations of bam files.
+fake_bam_design = data.frame(BAM=fake_bam_files,
+                             fake_align1=c(1, 0, 0),
+                             fake_align2=c(0, 1, 0),
+                             fake_align3=c(0, 0, 1),
+                             fake_align12=c(1, 1, 0),
+                             fake_align13=c(1, 0, 1),
+                             fake_align23=c(0, 1, 1),
+                             fake_align123=c(1, 1, 1),
+                             stringsAsFactors=FALSE)
+
+# Define the region over which single-region tests will be run.
+# fake_align1 has 1 read over the whole region.
+# fake_align2 has 2 reads over the whole region.
+# fake_align3 has 4 reads over the first half of the region, 8 over the second half.
+fake_bam_region_1_chr="chr1"
+fake_bam_region_1_pos_start=1000000
+fake_bam_region_1_pos_end = 1004999
+fake_bam_region_1_pos_range=fake_bam_region_1_pos_start:fake_bam_region_1_pos_end
+fake_bam_region_1_test_region_unique = GRanges(paste0(fake_bam_region_1_chr, ":", fake_bam_region_1_pos_start, "-", fake_bam_region_1_pos_end))
+
+# Load the expected genomic coverages generated along with the bam files.
+fake_bam_expected_coverages = list()
+fake_bam_expected_rpm = list()
+for(i in fake_bam_design$BAM) {
+    cov_file = gsub(".bam", ".sam", i)
+    load(paste0(cov_file, ".coverage.RData"))
+    fake_bam_expected_coverages[[i]] = cov_rle
+    
+    load(paste0(cov_file, ".coverage_rpm.RData"))
+    fake_bam_expected_rpm[[i]] = rpm_rle
+}
 
 ###################################################
 ## Test the metagene2$new() function (initialize)
@@ -337,13 +374,16 @@ test.metagene_get_regions_valid_usage_default <- function() {
 # Test the metagene2$get_matrice() function
 ##################################################
 
+# Tests to write:
+#  Test single region
+#  Test bin_size = 1
+#  Test bin_count < width(regions)
+
 test.metagene_group_coverages_valid_usage_default = function(){
     mg <- demo_mg$clone(deep=TRUE)
     grouped_coverages = mg$group_coverages(design=get_demo_design())
 
-    check_identical(length(grouped_coverages), ncol(get_demo_design()) - 1)
-    
-    # Test values?
+    checkIdentical(length(grouped_coverages), ncol(get_demo_design()) - 1)
 }
 
 test.metagene_bin_coverages_valid_usage_default_design = function(){
@@ -352,14 +392,12 @@ test.metagene_bin_coverages_valid_usage_default_design = function(){
     binned_coverages = mg$bin_coverages()
 
     design = mg$get_design()
-    check_identical(length(binned_coverages), ncol(design) - 1)
-    check_identical(names(binned_coverages), colnames(design)[-1])
+    checkIdentical(length(binned_coverages), ncol(design) - 1)
+    checkIdentical(names(binned_coverages), colnames(design)[-1])
     for(i in 1:length(binned_coverages)) {
-        check_identical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
-        check_identical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
+        checkIdentical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
+        checkIdentical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
     }
-    
-    # Test values?
 }
 
 test.metagene_bin_coverages_valid_usage_custom_design = function(){
@@ -367,14 +405,12 @@ test.metagene_bin_coverages_valid_usage_custom_design = function(){
     mg$group_coverages(design=get_demo_design())
     binned_coverages = mg$bin_coverages()
 
-    check_identical(length(binned_coverages), ncol(get_demo_design()) - 1)
-    check_identical(names(binned_coverages), colnames(get_demo_design())[-1])
+    checkIdentical(length(binned_coverages), ncol(get_demo_design()) - 1)
+    checkIdentical(names(binned_coverages), colnames(get_demo_design())[-1])
     for(i in 1:length(binned_coverages)) {
-        check_identical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
-        check_identical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
+        checkIdentical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
+        checkIdentical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
     }
-    
-    # Test values?
 }
 
 test.metagene_split_coverages_valid_usage_default = function(){
@@ -382,15 +418,117 @@ test.metagene_split_coverages_valid_usage_default = function(){
     mg$group_coverages(design=get_demo_design())
     mg$split_coverages()
 
-    check_identical(length(binned_coverages), ncol(get_demo_design()) - 1)
-    check_identical(names(binned_coverages), colnames(get_demo_design())[-1])
+    checkIdentical(length(binned_coverages), ncol(get_demo_design()) - 1)
+    checkIdentical(names(binned_coverages), colnames(get_demo_design())[-1])
     for(i in 1:length(binned_coverages)) {
-        check_identical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
-        check_identical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
+        checkIdentical(nrow(binned_coverages[[i]]) == length(mg$get_regions()))
+        checkIdentical(ncol(binned_coverages[[i]]) == mg$get_params()[["bin_count"]])
     }
-    
-    # Test values?
 }
+
+test.metagene_raw_coverage_values_unique_region = function(){
+    # Create the metagene object.
+    mg <- metagene2$new(bam_files=fake_bam_design$BAM, regions=test_region_unique)
+    
+    # Test genome-wide raw and normalized coverages for
+    # strand_mode=FALSE
+    raw_coverages = mg$get_raw_coverages()
+    norm_coverages = mg$get_normalized_coverages()
+    for(i in fake_bam_design$BAM) {
+        obs = raw_coverages[[i]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+        exp = fake_bam_expected_coverages[[i]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+        checkIdentical(obs, exp)
+                       
+        obs = norm_coverages[[i]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+        exp = fake_bam_expected_rpm[[i]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+        checkTrue(all(abs(obs - exp) < 10e-8))
+    }
+}
+
+test.metagene_group_coverage_values_unique_region = function(){
+    # Create the metagene object.
+    mg <- metagene2$new(bam_files=fake_bam_design$BAM, regions=test_region_unique)
+     
+    # Test group coverages.
+    group_coverages = mg$group_coverages(design=fake_bam_design)
+    
+    # Grouped coverages for unit designs should be the same as the plain ones.
+    for(i in c("fake_align1", "fake_align2", "fake_align3")) {
+        obs = group_coverages[["*"]][[i]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+        exp = fake_bam_expected_coverages[[paste0(i, ".bam")]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+        checkIdentical(obs, exp)
+    }
+
+    # Test combined group coverages.
+    obs = group_coverages[["*"]][["fake_align12"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+    exp = fake_bam_expected_coverages[["fake_align1.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range] +
+          fake_bam_expected_coverages[["fake_align2.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+    checkIdentical(obs, exp)
+    
+    obs = group_coverages[["*"]][["fake_align23"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+    exp = fake_bam_expected_coverages[["fake_align2.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range] +
+          fake_bam_expected_coverages[["fake_align3.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+    checkIdentical(obs, exp)
+    
+    obs = group_coverages[["*"]][["fake_align13"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+    exp = fake_bam_expected_coverages[["fake_align1.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range] +
+          fake_bam_expected_coverages[["fake_align3.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+    checkIdentical(obs, exp)
+
+    obs = group_coverages[["*"]][["fake_align123"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+    exp = fake_bam_expected_coverages[["fake_align1.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range] +
+          fake_bam_expected_coverages[["fake_align2.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range] +
+          fake_bam_expected_coverages[["fake_align3.bam"]][[fake_bam_region_1_chr]][fake_bam_region_1_pos_range]
+    checkIdentical(obs, exp)
+}
+
+test.metagene_bin_coverage_values_unique_region = function(){
+    # Create the metagene object.
+    mg <- metagene2$new(bam_files=fake_bam_design$BAM, regions=test_region_unique, design=fake_bam_design)
+    
+    # Test binned coverages for bins 
+    # where all values are the same.
+    bin_coverages = mg$bin_coverages()
+    checkTrue(all(bin_coverages[["fake_align1"]][1,]==1))
+    checkTrue(all(bin_coverages[["fake_align2"]][1,]==2))
+    checkTrue(all(bin_coverages[["fake_align3"]][1,1:50]==4))
+    checkTrue(all(bin_coverages[["fake_align3"]][1,51:100]==8))
+    checkTrue(all(bin_coverages[["fake_align123"]][1,1:50]==7))
+    checkTrue(all(bin_coverages[["fake_align123"]][1,51:100]==11))
+    
+    # Test binned coverages where some values are means.
+    bin_coverages = mg$bin_coverages(bin_count=5)
+    checkTrue(all(bin_coverages[["fake_align1"]][1,]==1))
+    checkTrue(all(bin_coverages[["fake_align2"]][1,]==2))
+    checkTrue(bin_coverages[["fake_align3"]][1,1]==4)
+    checkTrue(bin_coverages[["fake_align3"]][1,2]==4)
+    checkTrue(bin_coverages[["fake_align3"]][1,3]==6)
+    checkTrue(bin_coverages[["fake_align3"]][1,4]==8)
+    checkTrue(bin_coverages[["fake_align3"]][1,5]==8)
+}
+
+test.metagene_calculate_ci_values_unique_region = function(){
+    # Create the metagene object.
+    mg <- metagene2$new(bam_files=fake_bam_design$BAM, regions=test_region_unique, design=fake_bam_design)
+ 
+    full_df = mg$add_metadata()
+
+    # Only one region, all confidence intervals should be NA.
+    checkTrue(all(is.na(full_df$qinf) & is.na(full_df$qsup)))
+    
+    # There should be five bins.
+    checkTrue(max(full_df$bin)==5 && length(unique(full_df$bin))==5)
+    
+    # Bin values should match
+    checkTrue((full_df %>% filter(bin==3 & design=="fake_align3") %>% pull(value)) == 6)
+    
+    # All groups should be represented.
+    checkTrue(all(full_df$design %in% colnames(fake_bam_design)[-1]))
+    
+    test_plot = mg$produce_metagene()
+    checkTrue("ggproto" %in% class(test_plot$scales))
+}
+
 
 ##################################################
 # Test the metagene2$get_data_frame() function
