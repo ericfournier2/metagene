@@ -1074,29 +1074,31 @@ metagene2 <- R6Class("metagene",
             cache_invalidated=FALSE
             
             # Loop over all passed-in parameters.
-            for(arg_index in 1:length(arg_list)) {
-                arg_name=names(arg_list)[arg_index]
-                
-                # Determine if the parameter has changed from its last value.
-                if(do.call(private$ph$have_params_changed, arg_list[arg_index])) {
-                    private$print_verbose(paste0(arg_name, " has changed.\n"))
+            if(length(arg_list) > 0) {
+                for(arg_index in 1:length(arg_list)) {
+                    arg_name=names(arg_list)[arg_index]
                     
-                    # Determine which step the parameter belongs to.
-                    invalidated_step = param_step_map[names(arg_list)[arg_index]]
-                    if(!is.na(invalidated_step)) {
-                        # Invalidate all caches for the step the parameter belonged to,
-                        # as well as all caches for downsteam steps.
-                        invalidated_caches = step_cache_map[1:which(names(step_cache_map)==invalidated_step)]
-                        private$print_verbose(paste0(paste0(invalidated_caches, collapse=", "), " will be invalidated.\n"))
-                        for(cache in invalidated_caches) {
-                            private[[cache]] = NULL
-                            cache_invalidated = TRUE
+                    # Determine if the parameter has changed from its last value.
+                    if(do.call(private$ph$have_params_changed, arg_list[arg_index])) {
+                        private$print_verbose(paste0(arg_name, " has changed.\n"))
+                        
+                        # Determine which step the parameter belongs to.
+                        invalidated_step = param_step_map[names(arg_list)[arg_index]]
+                        if(!is.na(invalidated_step)) {
+                            # Invalidate all caches for the step the parameter belonged to,
+                            # as well as all caches for downsteam steps.
+                            invalidated_caches = step_cache_map[1:which(names(step_cache_map)==invalidated_step)]
+                            private$print_verbose(paste0(paste0(invalidated_caches, collapse=", "), " will be invalidated.\n"))
+                            for(cache in invalidated_caches) {
+                                private[[cache]] = NULL
+                                cache_invalidated = TRUE
+                            }
                         }
                     }
                 }
-            }
             
-            do.call(private$ph$update_params, arg_list)
+                do.call(private$ph$update_params, arg_list)
+            }
             
             return(cache_invalidated)
         },
