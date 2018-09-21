@@ -743,6 +743,7 @@ metagene2 <- R6Class("metagene",
             
             regions <- GenomicRanges::reduce(regions)
             bam_files = private$ph$get("bam_files")
+
             res <- private$parallel_job$launch_job(
                         data = bam_files,
                         FUN = private$bam_handler$get_coverage,
@@ -750,7 +751,7 @@ metagene2 <- R6Class("metagene",
                         force_seqlevels= private$ph$get("force_seqlevels"),
                         simplify=FALSE)
 
-            #names(res) <- names(bam_files)
+            names(res) <- bam_files
             
             # Turn res inside out so that strand is at the top level,
             # and bam files on the second.
