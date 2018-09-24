@@ -31,7 +31,7 @@ validate_bin_count = function(bin_count) {
 
 validate_sample_count = function(sample_count) {
     stopifnot(is.numeric(sample_count))
-    stopifnot(sample_count > 0)
+    stopifnot(sample_count >= 0)
     stopifnot(as.integer(sample_count) == sample_count)
 }
 

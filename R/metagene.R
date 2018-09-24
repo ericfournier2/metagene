@@ -379,16 +379,12 @@ metagene2 <- R6Class("metagene",
             
             region_subset = TRUE
             if (!is.null(region_names)) {
-                stopifnot(is.character(region_names))
-                stopifnot(all(region_names %in% unique(private$table$region)))
                 region_subset = results$region %in% region_names
             }
             
             design_subset = TRUE
             if (!is.null(design_names)) {
-                stopifnot(is.character(design_names))
-                stopifnot(all(design_names %in% unique(private$table$design)))
-                design_subset = results$region %in% region_names
+                design_subset = results$design %in% design_names
             }
             return(results[region_subset & design_subset,,drop=F])
         },
@@ -869,9 +865,8 @@ metagene2 <- R6Class("metagene",
             } else {
                 stopifnot(is.character(filenames))
                 stopifnot(length(filenames) > 0)
-                bam_names <- private$get_bam_names(filenames)
-                stopifnot(length(bam_names) == length(filenames))
-                lapply(private$coverages, function(x) { x[bam_names] })
+                stopifnot(all(filenames %in% names(private$coverages)))
+                return(private$coverages[filenames])
             }
         },
         get_normalized_coverages_internal = function(filenames = NULL) {
