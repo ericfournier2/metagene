@@ -30,9 +30,13 @@ regions_strand <- lapply(regions_strand,
                         function(x) { strand(x[index_strand]) <- "-"; x })
 demo_mg <- metagene2$new(regions = get_demo_regions(),
                         bam_files = get_demo_bam_files())
-region <- regions[1]
-bam_file <- bam_files[1]
-demo_mg_min <- metagene2$new(regions = region, bam_files = bam_file)
+                        
+full_mg = demo_mg$clone(deep=TRUE)
+full_mg$produce_metagene()
+                        
+#region <- regions[1]
+#bam_file <- bam_files[1]
+#demo_mg_min <- metagene2$new(regions = region, bam_files = bam_file)
 
 # Load fake SAMs for value tests.
 fake_bam_files = system.file(c("fake_align1.bam", "fake_align2.bam", "fake_align3.bam"),
@@ -536,43 +540,39 @@ test.metagene_calculate_ci_values_unique_region = function(){
 
 ## Valid usage default
 test.metagene_get_data_frame_valid_usage_default <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg$produce_table()$produce_data_frame(sample_count = 10)
- df <- mg$get_data_frame()
+ df <- full_mg$get_data_frame()
  regions <- get_demo_regions()
  bam_files <- get_demo_bam_files()
  checkTrue(is.data.frame(df))
  checkTrue(ncol(df) == 8)
  checkTrue(nrow(df) == length(regions) * length(bam_files) * mg$get_params()$bin_count)
 }
-#
+
 ### Valid usage subset
 test.metagene_get_data_frame_valid_usage_subset <- function() {
- regions <- tools::file_path_sans_ext(basename(get_demo_regions()[1]))
- bam_files <- tools::file_path_sans_ext(basename(get_demo_bam_files()[1:2]))
- mg <- demo_mg$clone(deep=TRUE)
- mg$produce_table()$produce_data_frame(sample_count = 10)
- df <- mg$get_data_frame(region_names = regions, design_names = bam_files)
+ single_region = names(get_demo_regions())[1]
+ three_designs = colnames(full_mg$get_design())[2:4]
+
+ df <- full_mg$get_data_frame(region_names = single_region, design_names =three_designs )
+
  checkTrue(is.data.frame(df))
  checkTrue(ncol(df) == 8)
- checkTrue(nrow(df) == length(regions) * length(bam_files) * mg$get_params()$bin_count)
+ checkTrue(nrow(df) == length(single_region) * length(three_designs) * full_mg$get_params()$bin_count)
 }
 
-#
 ## Valid usage get_data_frame return by copy of data_frame
 test.metagene_get_data_frame_check_copy_of_data_frame <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg$produce_table()
- mg$produce_data_frame()
+ mg <- full_mg$clone(deep=TRUE)
+ 
  df1 <- mg$get_data_frame()
  #modification of table by reference
  df1$c <- 1:1000
+
  #Is table copied and unchanged ? 
  df2 <- mg$get_data_frame()
  checkIdentical(ncol(df1) == ncol(df2), FALSE)
 }
 
-#
 ## Valid usage no data_frame produced
 test.metagene_get_data_frame_valid_usage_no_data_frame <- function() {
  mg <- demo_mg$clone(deep=TRUE)
@@ -581,96 +581,6 @@ test.metagene_get_data_frame_valid_usage_no_data_frame <- function() {
  df_subset <- mg$get_data_frame(get_demo_regions()[1],
                                 get_demo_bam_files()[1:2])
  checkTrue(is.null(df_subset))
-}
-#
-### Invalid usage region_names class
-test.metagene_get_data_frame_invalid_usage_region_names_class <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
- obs <- tryCatch(mg$get_data_frame(region_names = 1),
-                error = conditionMessage)
- exp <- "is.character(region_names) is not TRUE"
- checkIdentical(obs, exp)
-}
-#
-### Invalid usage region_names empty
-test.metagene_get_data_frame_invalid_usage_region_names_empty <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
- obs <- tryCatch(mg$get_data_frame(region_names = ""),
-                error = conditionMessage)
- exp <- "all(region_names %in% unique(private$table$region)) is not TRUE"
- checkIdentical(obs, exp)
-}
-#
-### Invalid usage region_names absent
-test.metagene_get_data_frame_invalid_usage_region_names_absent <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
- obs <- tryCatch(mg$get_data_frame(region_names = "not_valid_name"),
-                error = conditionMessage)
- exp <- "all(region_names %in% unique(private$table$region)) is not TRUE"
- checkIdentical(obs, exp)
-}
-#
-### Valid usage exp_name no design
-test.metagene_get_data_frame_valid_usage_design_names_no_design <- function() {
- mg <- demo_mg$clone(deep=TRUE)$produce_table()
- mg$produce_data_frame(sample_count = 10)
- exp_name <- tools::file_path_sans_ext(basename(get_demo_bam_files()[1]))
- nodesign <- unique(mg$get_data_frame(design_names = exp_name)$design)
- checkIdentical(nodesign, exp_name)
-}
-#
-### Valid usage exp_name design
-test.metagene_get_data_frame_valid_usage_design_names_exist_design <- function() {
- mg <- demo_mg$clone(deep=TRUE)$produce_table(design = get_demo_design())
- mg$produce_data_frame(sample_count = 10)
- exp_name <- unique(mg$get_table()$design)
- yesdesign <- unique(mg$get_data_frame(design_names = exp_name)$design)
- checkIdentical(yesdesign, exp_name)
-}
-#
-### Invalid usage exp_name bam_file design
-test.metagene_get_data_frame_invalid_usage_design_names_bam_file_design <-
-    function() {
- mg <- demo_mg$clone(deep=TRUE)$produce_table(design = get_demo_design())
- mg$produce_data_frame(sample_count = 10)
- exp_name <- tools::file_path_sans_ext(basename(get_demo_bam_files()[1]))
- obs <- tryCatch(mg$get_data_frame(design_names = exp_name),
-                error = conditionMessage)
- exp <- "all(design_names %in% unique(private$table$design)) is not TRUE"
- checkIdentical(obs, exp)
-}
-#
-### Invalid usage design_names class
-test.metagene_get_data_frame_invalid_usage_design_names_class <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
- obs <- tryCatch(mg$get_data_frame(design_names = 1),
-                error = conditionMessage)
- exp <- "is.character(design_names) is not TRUE"
- checkIdentical(obs, exp)
-}
-#
-### Invalid usage design_names empty
-test.metagene_get_data_frame_invalid_usage_design_names_empty <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
- obs <- tryCatch(mg$get_data_frame(design_names = ""),
-                error = conditionMessage)
- exp <- "all(design_names %in% unique(private$table$design)) is not TRUE"
- checkIdentical(obs, exp)
-}
-#
-### Invalid usage design_names absent
-test.metagene_get_data_frame_invalid_usage_design_names_absent <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- mg <- mg$produce_table()$produce_data_frame(sample_count = 10)
- obs <- tryCatch(mg$get_data_frame(design_names = "not_valid_name"),
-                error = conditionMessage)
- exp <- "all(design_names %in% unique(private$table$design)) is not TRUE"
- checkIdentical(obs, exp)
 }
 
 ##################################################
@@ -685,14 +595,10 @@ test.metagene_get_plot_valid_case_no_graph <- function() {
 }
 
 ## Valid case graph
-#test.metagene_get_plot_valid_case_graph <- function() {
-#    pdf(NULL)
-#    mg <- demo_mg$clone(deep=TRUE)
-#    mg$produce_data_frame(sample_count = 10)$plot()
-#    plot <- mg$get_plot()
-#    dev.off()
-#    checkTrue(all(class(plot) == c("gg", "ggplot")))
-#}
+test.metagene_get_plot_valid_case_graph <- function() {
+    plot <- full_mg$get_plot()
+    checkTrue(all(class(plot) == c("gg", "ggplot")))
+}
 
 ##################################################
 # Test the metagene2$get_raw_coverages() function
@@ -703,17 +609,7 @@ exp_raw <- GenomicAlignments::coverage(exp_raw)
 
 ## Default filenames
 test.metagene_get_raw_coverages_default_filenames <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    obs <- mg$get_raw_coverages()[[1]]
-    checkTrue(all(vapply(1:length(obs),
-                        function(i) all(obs[[i]]==exp_raw[[i]]),
-                        logical(1))))
-}
-
-## NULL filenames
-test.metagene_get_raw_coverages_null_filenames <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    obs <- mg$get_raw_coverages(filenames = NULL)[[1]]
+    obs <- full_mg$get_raw_coverages()[[1]]
     checkTrue(all(vapply(1:length(obs),
                         function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
@@ -721,8 +617,7 @@ test.metagene_get_raw_coverages_null_filenames <- function() {
 
 ## One filename
 test.metagene_get_raw_coverages_one_filename <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    obs <- mg$get_raw_coverages(filenames = bam_files[1])[[1]]
+    obs <- full_mg$get_raw_coverages(filenames = bam_files[1])[[1]]
     checkTrue(all(vapply(1:length(obs),
                         function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
@@ -785,15 +680,6 @@ exp_norm <- exp_raw * weight
 test.metagene_get_normalized_coverages_default_filenames <- function() {
     mg <- demo_mg$clone(deep=TRUE)
     obs <- mg$get_normalized_coverages()[[1]]
-    checkTrue(all(vapply(1:length(obs),
-                        function(i) all(obs[[i]]==exp_raw[[i]]),
-                        logical(1))))
-}
-
-## NULL filenames
-test.metagene_get_normalized_coverages_null_filenames <- function() {
-    mg <- demo_mg$clone(deep=TRUE)
-    obs <- mg$get_normalized_coverages(filenames = NULL)[[1]]
     checkTrue(all(vapply(1:length(obs),
                         function(i) all(obs[[i]]==exp_raw[[i]]),
                         logical(1))))
