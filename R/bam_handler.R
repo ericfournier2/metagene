@@ -205,13 +205,9 @@ Bam_Handler <- R6Class("Bam_Handler",
         },
         get_noise_ratio = function(chip_bam_names, input_bam_names) {
             lapply(c(chip_bam_names, input_bam_names), private$check_bam_file)
-            i <- rownames(private$bam_files) %in% chip_bam_names
-            chip_bam_files <- private$bam_files$bam[i]
-            i <- rownames(private$bam_files) %in% input_bam_names
-            input_bam_files <- private$bam_files$bam[i]
-            lapply(c(chip_bam_files, input_bam_files), private$check_bam_file)
-            chip.pos <- private$read_bam_files(chip_bam_files)
-            input.pos <- private$read_bam_files(input_bam_files)
+
+            chip.pos <- private$read_bam_files(chip_bam_names)
+            input.pos <- private$read_bam_files(input_bam_names)
             DBChIP:::NCIS.internal(chip.pos, input.pos)$est
         }
     ),

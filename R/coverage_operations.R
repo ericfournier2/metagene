@@ -168,14 +168,14 @@ bin_coverages_s = function(coverages, regions, bin_count) {
 ###############################################################################
 
 # Group coverages according to design.
-group_coverages_s = function(coverage_s, design, noise_removal, bam_handler=NULL) {
+group_coverages_s = function(coverage_s, design, merge_operation='+', bam_handler=NULL) {
     if(is.null(coverage_s)) {
         results = NULL
     } else {
-        if (!is.null(noise_removal)) {
+        if (merge_operation=="NCIS") {
             results <- remove_controls(coverage_s, design, bam_handler)
         } else {
-            results <- merge_chip(coverage_s, design)
+            results <- merge_chip(coverage_s, design, merge_operation)
         }
     }
     
@@ -187,16 +187,16 @@ remove_controls = function(coverages, design, bam_handler) {
     results <- list()
     for (design_name in colnames(design)[-1]) {
         # Add up coverage for all ChIP and all input bams.
-        chip_results <- merge_reduce(coverages, design, design_name, 1)
-        input_results <- merge_reduce(coverages, design, design_name, 2)
+        chip_results <- merge_reduce(coverages, design, design_name, 1, '+')
+        input_results <- merge_reduce(coverages, design, design_name, 2, '+')
         
         
         if (length(input_results$BamNames) > 0) {
             # If we had input bams, perform noise reduction.
             noise_ratio <-
-                bam_handler$get_noise_ratio(chip_results$BamNames,
-                                            input_results$BamNames)
-            results[design_name] <- chip_results$Coverage - (input_results$Coverage * noise_ratio)
+                bam_handler$get_noise_ratio(as.character(chip_results$BamNames),
+                                            as.character(input_results$BamNames))
+            results[[design_name]] <- chip_results$Coverage - (input_results$Coverage * noise_ratio)
             
             # When input signal is stronger than the chip's, we'll get
             # negative values. Set the value floor to 0.
@@ -204,7 +204,7 @@ remove_controls = function(coverages, design, bam_handler) {
             results[[design_name]][i] <- 0
         } else {
             # If we had no input bams, return coverage as-is.
-            results[design_name] <- chip_results$Coverage
+            results[[design_name]] <- chip_results$Coverage
         }
     }
     results
@@ -212,21 +212,26 @@ remove_controls = function(coverages, design, bam_handler) {
 
 # Merge multiple coverages within a coverage list according to the columns
 # of design.
-merge_chip = function(coverages, design) {
+merge_chip = function(coverages, design, merge_operation) {
     result <- list()
     for (design_name in colnames(design)[-1]) {
-        result[[design_name]] <- merge_reduce(coverages, design, design_name, 1)$Coverage
+        result[[design_name]] <- merge_reduce(coverages, design, design_name, 1, merge_operation)$Coverage
     }
     result
 }
 
 # Perform the "Reduce" operation on the elements of coverage which have
 # the value design_value in column design_name of the design data-frame.
-merge_reduce = function(coverages, design, design_name, design_value) {
+merge_reduce = function(coverages, design, design_name, design_value, merge_operation) {
     indices = design[[design_name]] == design_value
     bam_names <- design[indices, 1]
     
-    list(Coverage=Reduce("+", coverages[bam_names]),
+    reduced_coverages = Reduce("+", coverages[bam_names])
+    if(merge_operation=="mean" && sum(indices) > 1) {
+        reduced_coverages = reduced_coverages / sum(indices)
+    }
+
+    list(Coverage=reduced_coverages,
          BamNames=bam_names)
 }
 

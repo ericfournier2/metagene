@@ -96,7 +96,7 @@
 #' @section Methods:
 #' \describe{
 #'    \item{}{\code{mg$group_coverages(design=NA, normalization=NA, 
-#'            noise_removal=NA, design_filter=NA)}}
+#'            design_filter=NA)}}
 #'    \item{Description}{This method normalizes genome-wide coverages, then groups
 #'            them according to the specified design groups. It returns
 #'            a list of possible read orientations (+, -, *), each element
@@ -107,11 +107,10 @@
 #'    \item{design}{A \code{data.frame} that describe to experiment to plot.
 #'            see \code{plot} function for more details. \code{NA} can 
 #'            be used keep previous design value. Default: \code{NA}.}
-#'    \item{noise_removal}{The algorithm to use to remove control(s). Possible
-#'                        values are \code{NULL} and "NCIS". See
-#'                        Liand and Keles 2012 for the NCIS algorithm.}
 #'    \item{normalization}{The algorithm to use to normalize samples. Possible
-#'                        values are \code{NULL} and "RPM". Default: NULL.}
+#'                        values are \code{NULL}, "RPM" and "NCIS". See
+#'                        Liand and Keles 2012 for the NCIS algorithm.
+#'                        Default: NULL.}
 #'    \item{design_filter}{}
 #' }
 #' \describe{
@@ -281,7 +280,6 @@ metagene2 <- R6Class("metagene",
                     strand_specific=strand_specific,
                     paired_end_strand_mode=paired_end_strand_mode,
                     normalization=NULL,
-                    noise_removal=NULL,
                     avoid_gaps=FALSE,
                     gaps_threshold=0,
                     bin_count=100,
@@ -305,7 +303,6 @@ metagene2 <- R6Class("metagene",
                     force_seqlevels=validate_force_seqlevels,
                     assay=validate_assay,
                     normalization=validate_normalization,
-                    noise_removal=validate_noise_removal,
                     avoid_gaps=validate_avoid_gaps,
                     gaps_threshold=validate_gaps_threshold,
                     bin_count=validate_bin_count,
@@ -410,7 +407,7 @@ metagene2 <- R6Class("metagene",
             self$add_metadata()
             invisible(self)
         },
-        group_coverages = function(design=NA, normalization=NA, noise_removal=NA, design_filter=NA) {
+        group_coverages = function(design=NA, normalization=NA, design_filter=NA) {
             # Clean up the design so it'll have the expected format.
             design = private$clean_design(design, private$ph$get("bam_files"))
 
@@ -420,17 +417,32 @@ metagene2 <- R6Class("metagene",
                 private$ph$set("design_metadata", data.frame(design=design[,1]))
             }
             
-            private$update_params_and_invalidate_caches(design, normalization, noise_removal, design_filter)
+            private$update_params_and_invalidate_caches(design, normalization, design_filter)
             
             if(is.null(private$grouped_coverages)) {
                 bm <- private$start_bm("Grouping and normalizing coverages")
+                
+                # Identify design subset.
                 design_col_to_keep = rep_len(private$ph$get("design_filter"), ncol(private$ph$get("design")) - 1)
-                design_col_to_keep = 1 + which(design_col_to_keep)            
+                design_col_to_keep = 1 + which(design_col_to_keep)
+                design_subset = private$ph$get("design")[, c(1, design_col_to_keep)]
+                
+                # Determine how data is to be merged
+                if(is.null(private$ph$get("normalization"))) {
+                    merge_operation = "+"
+                } else if(private$ph$get("normalization")=="RPM") {
+                    merge_operation = "mean"
+                } else if(private$ph$get("normalization")=="NCIS") {
+                    merge_operation = "NCIS"
+                } else {
+                    stop("Unsupported normalization value.")
+                }
+                
                 private$grouped_coverages = lapply(private$get_coverages_internal(),
                                                    group_coverages_s,
-                                                   private$ph$get("design")[, c(1, design_col_to_keep)],
-                                                   private$ph$get("noise_removal"),
-                                                   private$bam_handler)
+                                                   design=design_subset,
+                                                   bam_handler=private$bam_handler,
+                                                   merge_operation=merge_operation)
                 private$stop_bm(bm)                                                   
             }
 

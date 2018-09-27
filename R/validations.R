@@ -44,15 +44,9 @@ validate_gaps_threshold = function(gaps_threshold) {
     stopifnot(gaps_threshold >= 0)
 }
 
-validate_noise_removal = function(noise_removal) {
-    if (!is.null(noise_removal) && !(noise_removal %in% c("NCIS"))) {
-        stop('noise_removal must be NA, NULL, or "NCIS".')
-    }
-}
-
 validate_normalization = function(normalization) {
-    if (!is.null(normalization) && normalization != "RPM") {
-        stop("normalization must be NA, NULL or \"RPM\".")
+    if (!is.null(normalization) && normalization != "RPM" && normalization != "NCIS") {
+        stop('normalization must be NULL, "RPM" or "NCIS".')
     }
 }
 
