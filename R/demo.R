@@ -78,7 +78,7 @@ get_demo_rna_regions <- function() {
 get_demo_metagene <- function() {
     regions <- get_demo_regions()
     bam_files <- get_demo_bam_files()
-    metagene$new(regions = regions, bam_files = bam_files)
+    metagene2$new(regions = regions, bam_files = bam_files)
 }
 
 #' Get a demo design object
@@ -88,14 +88,13 @@ get_demo_metagene <- function() {
 #' @examples
 #' mg <- get_demo_design()
 get_demo_design <- function() {
-    file_design <- system.file("extdata/design.txt", package = "metagene2")
     return(data.frame(Samples = get_demo_bam_files(),
                       align1 = c(1,1,0,0,2),
                       align2 = c(0,0,1,1,2)))
 }
 
 get_not_indexed_bam_file <- function() {
-    system.file("extdata/not_indexed.bam", package = "metagene")
+    system.file("extdata/not_indexed.bam", package = "metagene2")
 }
 
 get_different_seqnames_bam_file <- function() {

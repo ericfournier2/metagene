@@ -21,18 +21,42 @@ design <- data.frame(Samples = c("align1_rep1.bam", "align1_rep2.bam",
                     align1 = c(1,1,0,0,2), align2 = c(0,0,1,1,2))
 design$Samples <- paste0(system.file("extdata", package = "metagene2"), "/",
                         design$Samples)
-regions_strand <- lapply(regions, rtracklayer::import)
-stopifnot(length(unique(vapply(regions, length, numeric(1)))) == 1)
 set.seed(1)
-index_strand <- sample(1:length(regions_strand[[1]]),
-                    round(length(regions_strand[[1]])/2))
-regions_strand <- lapply(regions_strand,
-                        function(x) { strand(x[index_strand]) <- "-"; x })
 demo_mg <- metagene2$new(regions = get_demo_regions(),
                         bam_files = get_demo_bam_files())
                         
 full_mg = demo_mg$clone(deep=TRUE)
 full_mg$produce_metagene()
+
+test_invalid_param_constructor_value <- function(param_name, param_value, error_value) {
+    arg_list_new = list(bam_files=get_demo_bam_files(), 
+                        regions=get_demo_regions())
+    arg_list_new[[param_name]] = param_value
+    
+    obs <- tryCatch(do.call(metagene2$new, arg_list_new),
+                    error = conditionMessage)
+    checkIdentical(obs, error_value)
+}
+
+test_invalid_param_value <- function(param_name, param_value, step_function, error_value) {
+    arg_list_new = list(bam_files=get_demo_bam_files(), 
+                        regions=get_demo_regions())
+    arg_list_new[[param_name]] = param_value
+    
+    obs <- tryCatch(do.call(metagene2$new, arg_list_new),
+                    error = conditionMessage)
+    checkIdentical(obs, error_value)
+    
+    mg <- demo_mg$clone(deep=TRUE)
+    obs <- tryCatch(do.call(mg[[step_function]], arg_list_new[param_name]),
+                    error = conditionMessage)
+    checkIdentical(obs, error_value)
+    
+    mg <- demo_mg$clone(deep=TRUE)
+    obs <- tryCatch(do.call(mg$produce_metagene, arg_list_new[param_name]),
+                    error = conditionMessage)
+    checkIdentical(obs, error_value)      
+}
                         
 #region <- regions[1]
 #bam_file <- bam_files[1]
@@ -79,94 +103,31 @@ for(i in fake_bam_design$BAM) {
 ###################################################
 
 ## Invalid verbose value
-test.metagene_initialize_invalid_verbose_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            verbose = "ZOMBIES"),
-                    error = conditionMessage)
-    exp <- "verbose must be a logicial value (TRUE or FALSE)"
-    checkIdentical(obs, exp)
+test.metagene_invalid_verbose <- function() {
+    test_invalid_param_constructor_value("verbose", "ZOMBIES", "verbose must be a logicial value (TRUE or FALSE)")
 }
 
 ## Invalid force_seqlevels value
-test.metagene_initialize_invalid_force_seqlevels_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            force_seqlevels = "ZOMBIES"),
-                    error = conditionMessage)
-    exp <- "force_seqlevels must be a logicial value (TRUE or FALSE)"
-    checkIdentical(obs, exp)
+test.metagene_invalid_force_seqlevels <- function() {
+    test_invalid_param_constructor_value("force_seqlevels", "ZOMBIES", "force_seqlevels must be a logicial value (TRUE or FALSE)")
 }
 
 ## Negative padding_size value
-test.metagene_initialize_negative_padding_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            padding_size = -1),
-                    error = conditionMessage)
-    exp <- "padding_size must be a non-negative integer"
-    checkIdentical(obs, exp)
+test.metagene_invalid_padding <- function() {
+    test_invalid_param_constructor_value("padding_size", "ZOMBIES", "padding_size must be a non-negative integer")
+    test_invalid_param_constructor_value("padding_size", -1, "padding_size must be a non-negative integer")
+    test_invalid_param_constructor_value("padding_size", 1.2, "padding_size must be a non-negative integer")
 }
 
-## Non-integer padding_size value
-test.metagene_initialize_invalid_string_padding_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            padding_size = "NEW_ZOMBIE"),
-                    error = conditionMessage)
-    exp <- "padding_size must be a non-negative integer"
-    checkIdentical(obs, exp)
-}
-
-## Numerical padding_size value
-test.metagene_initialize_invalid_numerical_padding_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            padding_size = 1.2),
-                    error = conditionMessage)
-    exp <- "padding_size must be a non-negative integer"
-    checkIdentical(obs, exp)
-}
 
 ## Negative core value
-test.metagene_initialize_negative_padding_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            core = -1),
-                    error = conditionMessage)
-    exp <- "cores must be a positive integer or a BiocParallelParam instance."
-    checkIdentical(obs, exp)
+test.metagene_invalid_core <- function() {
+    test_invalid_param_constructor_value("cores", "ZOMBIES", "cores must be a positive integer or a BiocParallelParam instance.")
+    test_invalid_param_constructor_value("cores", -1, "cores must be a positive integer or a BiocParallelParam instance.")
+    test_invalid_param_constructor_value("cores", 1.2, "cores must be a positive integer or a BiocParallelParam instance.")
+    test_invalid_param_constructor_value("cores", 0, "cores must be a positive integer or a BiocParallelParam instance.")    
 }
 
-## Non-integer core value
-test.metagene_initialize_invalid_string_core_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            core = "ZOMBIE2"),
-                    error = conditionMessage)
-    exp <- "cores must be a positive integer or a BiocParallelParam instance."
-    checkIdentical(obs, exp)
-}
-
-## Numerical core value
-test.metagene_initialize_invalid_numerical_core_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            core = 1.2),    
-                    error = conditionMessage)
-    exp <- "cores must be a positive integer or a BiocParallelParam instance."
-    checkIdentical(obs, exp)
-}
-
-## Zero core value
-test.metagene_initialize_invalid_zero_core_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = get_demo_bam_files(),
-                                            core = 0),
-                    error = conditionMessage)
-    exp <- "cores must be a positive integer or a BiocParallelParam instance."
-    checkIdentical(obs, exp)
-}
 
 ## Non-character vector bam_files value
 test.metagene_initialize_invalid_num_vector_bam_files_value <- function() {
@@ -1103,49 +1064,13 @@ test.metagene_produce_table_design_using_no_file <- function() {
 }
 
 # Invalid bin_count class
-test.metagene_produce_table_invalid_bin_count_class <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- obs <- tryCatch(mg$produce_table(bin_count = "a"),
-                error = conditionMessage)
- exp <- "bin_count must be NULL or a positive integer"
- checkIdentical(obs, exp)
+test.metagene_invalid_bin_count <- function() {
+  test_invalid_param_value("bin_count", "a", "bin_coverages", "bin_count must be a positive integer")
+  test_invalid_param_value("bin_count", -1, "bin_coverages", "bin_count must be a positive integer")
+  test_invalid_param_value("bin_count", 1.2, "bin_coverages", "bin_count must be a positive integer")  
 }
 
-# Invalid bin_count negative value
-test.metagene_produce_table_invalid_bin_count_negative_value <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- obs <- tryCatch(mg$produce_table(bin_count = -1),
-                error = conditionMessage)
- exp <- "bin_count must be NULL or a positive integer"
- checkIdentical(obs, exp)
-}
 
-# Invalid bin_count decimals
-test.metagene_produce_table_invalid_bin_count_decimals <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- obs <- tryCatch(mg$produce_table(bin_count = 1.2),
-                error = conditionMessage)
- exp <- "bin_count must be NULL or a positive integer"
- checkIdentical(obs, exp)
-}
-
-# Invalid noise_rate class
-test.metagene_produce_table_invalid_noise_removal_class <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- obs <- tryCatch(mg$produce_table(noise_removal = 1234),
-                error = conditionMessage)
- exp <- 'noise_removal must be NA, NULL, or "NCIS".'
- checkIdentical(obs, exp)
-}
-
-# Invalid noise_rate value
-test.metagene_produce_table_invalid_noise_removal_value <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- obs <- tryCatch(mg$produce_table(noise_removal = "CSI"),
-                error = conditionMessage)
- exp <- 'noise_removal must be NA, NULL, or "NCIS".'
- checkIdentical(obs, exp)
-}
 
 # Valid noise_removal NCIS
 test.metagene_produce_table_valid_noise_removal_ncis <- function() {
@@ -1187,23 +1112,11 @@ test.metagene_produce_table_valid_noise_removal_ncis <- function() {
 }
 
 # Invalid normalization class
-test.metagene_produce_table_invalid_normalization_class <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- obs <- tryCatch(mg$produce_table(normalization = 1234),
-                error = conditionMessage)
- exp <- "normalization must be NA, NULL or \"RPM\"."
- checkIdentical(obs, exp)
+test.metagene_invalid_normalization <- function() {
+ test_invalid_param_value("normalization", 1234, "group_coverages", 'normalization must be NULL, "RPM" or "NCIS".')
+ test_invalid_param_value("normalization", "CSI", "group_coverages", 'normalization must be NULL, "RPM" or "NCIS".')
 }
 
-# Invalid normalization value
-test.metagene_produce_table_invalid_normalization_value <- function() {
- mg <- demo_mg$clone(deep=TRUE)
- obs <- tryCatch(mg$produce_table(normalization = "CSI"),
-                error = conditionMessage)
- exp <- "normalization must be NA, NULL or \"RPM\"."
- checkIdentical(obs, exp)
-}
-#
 ## Valid normalization RPM
 test.metagene_produce_table_valid_normalization_rpm <- function() {
     mg <- demo_mg$clone(deep=TRUE)
@@ -1351,128 +1264,17 @@ test.metagene_produce_data_frame_default_arguments <- function(){
     print(TRUE)
 }
 
-### Invalid alpha class
-test.metagene_produce_data_frame_invalid_alpha_class <- function(){
-    mg <- demo_mg$clone(deep=TRUE)
-    mg$produce_table()
-    obs <- tryCatch(mg$produce_data_frame(alpha='test'),
-                error = conditionMessage)
-    exp <- "is.numeric(alpha) is not TRUE"
-    checkIdentical(obs, exp)
-}
+
 ### Invalid alpha value
-test.metagene_produce_data_frame_invalid_alpha_value <- function(){
-    mg <- demo_mg$clone(deep=TRUE)
-    mg$produce_table()
-    obs <- tryCatch(mg$produce_data_frame(alpha=-0.8),
-                error = conditionMessage)
-    exp <- "alpha >= 0 & alpha <= 1 is not TRUE"
-    checkIdentical(obs, exp)
-}
-### Invalid sample_count class
-test.metagene_produce_data_frame_invalid_sample_count_class <- function(){
-    mg <- demo_mg$clone(deep=TRUE)
-    mg$produce_table()
-    obs <- tryCatch(mg$produce_data_frame(sample_count='test'),
-                error = conditionMessage)
-    exp <- "is.numeric(sample_count) is not TRUE"
-    checkIdentical(obs, exp)
-}
-### Invalid sample_count value
-test.metagene_produce_data_frame_invalid_sample_count_value <- function(){
-    mg <- demo_mg$clone(deep=TRUE)
-    mg$produce_table()
-    obs <- tryCatch(mg$produce_data_frame(sample_count=0),
-                error = conditionMessage)
-    exp <- "sample_count > 0 is not TRUE"
-    checkIdentical(obs, exp)
-    obs <- tryCatch(mg$produce_data_frame(sample_count=-10),
-                error = conditionMessage)
-    exp <- "sample_count > 0 is not TRUE"
-    checkIdentical(obs, exp)
+test.metagene_invalid_alpha <- function(){
+    test_invalid_param_value("alpha", 'test', "calculate_ci", "alpha >= 0 & alpha <= 1 is not TRUE")
+    test_invalid_param_value("alpha", -0.8, "calculate_ci", "alpha >= 0 & alpha <= 1 is not TRUE")    
 }
 
-###################################################
-## Test the metagene2$flip_regions() function
-###################################################
-# TODO: Re-code later
-## Valid case not previously flipped
-#test.metagene_flip_regions_not_previously_flipped <- function() {
-#    mg <- metagene2:::metagene2$new(bam_files = bam_files[1],
-#                                regions = regions_strand)
-#    checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
-#    mg$produce_table()
-#    m1 <- mg$get_table()[[1]][[1]][[1]]
-#    checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
-#    mg$flip_regions()
-#    m2 <- mg$get_table()[[1]][[1]][[1]]
-#    checkIdentical(mg$get_params()[["flip_regions"]], TRUE)
-#    mg$flip_regions()
-#    m3 <- mg$get_table()[[1]][[1]][[1]]
-#    checkIdentical(mg$get_params()[["flip_regions"]], TRUE)
-#    # Compare the matrices
-#    checkTrue(identical(m1, m2) == FALSE)
-#    checkTrue(identical(m2, m3) == TRUE)
-#    i <- index_strand
-#    checkIdentical(m1[!(i),], m2[!(i),])
-#    checkIdentical(m1[i,ncol(m1):1], m2[i,])
-#}
-#
-## Valid case previously flipped
-#test.metagene_flip_regions_previously_flipped <- function() {
-#    mg <- metagene2:::metagene2$new(bam_files = bam_files[1],
-#                                regions = regions_strand)
-#    checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
-#    mg$produce_table(flip_regions = TRUE)
-#    m1 <- mg$get_table()[[1]][[1]][[1]]
-#    checkIdentical(mg$get_params()[["flip_regions"]], TRUE)
-#    mg$flip_regions()
-#    m2 <- mg$get_table()[[1]][[1]][[1]]
-#    checkIdentical(mg$get_params()[["flip_regions"]], TRUE)
-#    # Compare the matrices
-#    checkTrue(identical(m1, m2) == TRUE)
-#}
-#
-#
-####################################################
-### Test the metagene2$unflip_regions() function
-####################################################
-#
-## Valid case not previously flipped
-test.metagene_unflip_regions_not_previously_flipped <- function() {
- mg <- metagene2:::metagene2$new(bam_files = bam_files[1],
-                                regions = regions_strand)
- checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
- mg$produce_table()
- tab1 <- mg$get_table()
- checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
- mg$unflip_regions()
- tab2 <- mg$get_table()
- checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
- # Compare the table
- checkTrue(identical(tab1, tab2) == TRUE)
-}
-#
-## Valid case previously flipped
-test.metagene_unflip_regions_previously_flipped <- function() {
- mg <- metagene2:::metagene2$new(bam_files = bam_files[1],
-                                regions = regions_strand)
- checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
- mg$produce_table(flip_regions = TRUE)
- tab1 <- mg$get_table()
- checkIdentical(mg$get_params()[["flip_regions"]], TRUE)
- mg$unflip_regions()
- tab2 <- mg$get_table()
- checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
- mg$unflip_regions()
- tab3 <- mg$get_table()
- checkIdentical(mg$get_params()[["flip_regions"]], FALSE)
- # Compare the table
- # print(tab1)
- # print(tab2)
- # print(tab3)
- checkTrue(identical(tab1, tab2) == FALSE)
- checkTrue(identical(tab2, tab3) == TRUE)
+### Invalid sample_count class
+test.metagene_invalid_sample_count <- function(){
+    test_invalid_param_value("sample_count", 'test', "calculate_ci", "is.numeric(sample_count) is not TRUE")
+    test_invalid_param_value("sample_count", -10, "calculate_ci", "sample_count >= 0 is not TRUE")    
 }
 
 test.metagene_replace_metadata <- function() {

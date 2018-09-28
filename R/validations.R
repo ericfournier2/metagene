@@ -24,7 +24,7 @@ validate_alpha = function(alpha) {
 validate_bin_count = function(bin_count) {
     if (!is.null(bin_count)) {
         if (!is.numeric(bin_count) || bin_count <= 0 || as.integer(bin_count) != bin_count) {
-            stop("bin_count must be NULL or a positive integer")
+            stop("bin_count must be a positive integer")
         }
     }
 }
