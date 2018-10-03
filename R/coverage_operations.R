@@ -2,15 +2,6 @@
 # Binning of contiguous regions (GRanges objects)                             #
 ###############################################################################
 
-# Split a coverage object by its seqnames,
-# and calls get_view_means on each subset.
-get_subtable = function(coverages, gr, bcount) {
-    grl <- split(gr, GenomeInfoDb::seqnames(gr))
-    i <- vapply(grl, length, numeric(1)) > 0
-    do.call("c", lapply(grl[i], get_view_means,
-                        bcount = bcount, cov = coverages))
-}
-
 # Split the ranges within gr into bcount bins and returns 
 # the mean coverage for each bin in a matrix where each row
 # is a binned region, and each column is a bin.
@@ -27,8 +18,21 @@ get_view_means = function(gr, bcount, cov) {
 # regions (A GRanges object). Coverages for regions on the '-' strands
 # are then reversed.
 bin_contiguous_regions <- function(coverage, regions, bin_count) {
-  m <-  matrix(get_subtable(coverage, regions, bin_count), ncol=bin_count, byrow=TRUE)
-    
+  # Split regions by chromosomes, since coverages are split this way.
+  grl <- split(regions, GenomeInfoDb::seqnames(regions))
+  
+  # Discard chromosomes where no regions are found.
+  i <- vapply(grl, length, numeric(1)) > 0
+  
+  # Get region means on a per-chromosome basis.
+  vector_means = do.call("c", lapply(grl[i], get_view_means,
+                                     bcount = bin_count, cov = coverage))
+  m <-  matrix(vector_means, ncol=bin_count, byrow=TRUE)
+
+  # Reorder matrix to preserve region order.
+  m <- m[GenomicRanges::findOverlaps(regions, unlist(grl), select="first"),]
+  
+  # Reverse rows on "-" strand
   mr <- m[,bin_count:1, drop=FALSE]
   i <-as.logical(strand(regions)=="-")
   m[i,] <- mr[i,]
