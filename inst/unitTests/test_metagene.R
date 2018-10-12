@@ -130,166 +130,119 @@ test.metagene_invalid_core <- function() {
 
 
 ## Non-character vector bam_files value
-test.metagene_initialize_invalid_num_vector_bam_files_value <- function() {
+test_invalid_bam_file <- function(value, error_value) {
     obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = c(2,4,3)),
+                                            bam_files = value),
                     error = conditionMessage)
-    exp <- "bam_files must be a vector of BAM filenames."
-    checkIdentical(obs, exp)
+    checkIdentical(obs, error_value)
 }
 
-## Non-vector bam_files value
-test.metagene_initialize_invalid_list_bam_files_value <- function() {
-    bam_files <- list(a = "ZOMBIE_01.txt", b = "ZOMBIE_02.txt")
-    obs <- tryCatch(metagene2:::metagene2$new(regions = get_demo_regions(),
-                                            bam_files = bam_files),
-                    error = conditionMessage)
-    exp <- "bam_files must be a vector of BAM filenames."
-    checkIdentical(obs, exp)
+test.metagene_invalid_bam_files <- function() {
+    test_invalid_bam_file(c(2,4,3), "bam_files must be a vector of BAM filenames.")
+    test_invalid_bam_file(list(a = "a.txt", b = "b.txt"), "bam_files must be a vector of BAM filenames.")
+    test_invalid_bam_file(not_indexed_bam_file, "All BAM files must be indexed")
+    test_invalid_bam_file(c(bam_files, not_indexed_bam_file), "All BAM files must be indexed")
 }
 
-# Not indexed bam in bam_files value
-test.metagene_initialize_invalid_no_index_bam_files_value <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = regions, bam_files = not_indexed_bam_file),
+test_invalid_region <- function(invalid_region, error, ...) {
+    obs <- tryCatch(do.call(metagene2$new, c(list(...), 
+                                             list(bam_files=get_demo_bam_files(),
+                                                  region = invalid_region))),
                     error = conditionMessage)
-    exp <- "All BAM files must be indexed"
-    checkIdentical(obs, exp)
+    checkIdentical(obs, error)
 }
 
-# Multiple bam files, only one not indexed in bam_files value
-test.metagene_initialize_multiple_bam_file_one_not_indexed <- function() {
-    bam_files <- c(bam_files, not_indexed_bam_file)
-    obs <- tryCatch(metagene2:::metagene2$new(regions = regions, bam_files = bam_files),
-                    error = conditionMessage)
-    exp <- "All BAM files must be indexed"
-    checkIdentical(obs, exp)
+test_valid_region <- function(valid_region, ...) {
+    obs <- do.call(metagene2$new, c(list(...), 
+                                    list(bam_files=get_demo_bam_files(),
+                                         region = valid_region)))
+    test_valid_metagene(obs)
 }
 
-# No value for regions argument 
-test.metagene_invalid_initialize_without_region_argument <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(bam_files = bam_files),
-                    error = conditionMessage)
-    exp <- 'argument "regions" is missing, with no default'
-    checkIdentical(obs, exp)
-}
-
-# No value for bam_files argument
-test.metagene_invalid_initialize_without_bam_files_argument <- function() {
-    obs <- tryCatch(metagene2:::metagene2$new(regions = regions),
-                    error = conditionMessage)
-    exp <- 'argument "bam_files" is missing, with no default'
-    checkIdentical(obs, exp)
+test_valid_metagene <- function(mg) {
+    checkIdentical(class(mg), c("metagene", "R6"))
 }
 
 # regions is the wrong class
-test.metagene_initialize_invalid_array_region_value <- function() {
+test.metagene_initialize_invalid_region_value <- function() {
     region <- array(data = NA, dim = c(2,2,2))
-    obs <- tryCatch(metagene2:::metagene2$new(bam_files = bam_files,
-                                            region = region),
-                    error = conditionMessage)
-    exp <- paste0("regions must be either a vector of BED filenames, a ",
-                "GRanges object or a GrangesList object")
-    checkIdentical(obs, exp)
+    test_invalid_region(region, paste0("regions must be either a vector of BED filenames, a ",
+                                       "GRanges object or a GrangesList object"))
 }
 
-# Valid regions with extra seqlevels
-test.metagene_initialize_valid_regions_supplementary_seqlevels <- function() {
-    region <- rtracklayer::import(regions[1])
-    GenomeInfoDb::seqlevels(region) <- c(GenomeInfoDb::seqlevels(region),
-                                        "extra_seqlevels")
-    obs <- tryCatch(metagene2$new(regions = region, bam_files = bam_files[1]),
-                    error = conditionMessage)
-    exp <- "Some seqlevels of regions are absent in bam_file"
-    checkIdentical(obs, exp)
+test.metagene_regions_seqlevels <- function() {
+    # GRanges have seqlevels (indicating all possible seqnames)
+    # and seqnames themselves. Extra seqlevels are no concerns.
+    region_with_extra_seq_level = get_demo_regions()[[1]]
+    GenomeInfoDb::seqlevels(region_with_extra_seq_level) <- c(GenomeInfoDb::seqlevels(region_with_extra_seq_level),
+                                                              "extra_seqlevels")
+    
+    test_invalid_region(region_with_extra_seq_level, "Some seqlevels of regions are absent in bam_file")
+    test_valid_region(region_with_extra_seq_level, force_seqlevels = TRUE)
+
+    # Extra seqnames means we must drop certain regions. We only do so
+    # if force_seqlevels=TRUE, otherwise we throw an error.
+    region_with_extra_seq = region_with_extra_seq_level
+    seqnames(region_with_extra_seq)[1] = "extra_seqlevels"
+
+    test_invalid_region(region_with_extra_seq, "Some seqlevels of regions are absent in bam_file")
+    test_valid_region(region_with_extra_seq, force_seqlevels = TRUE)
+
+    # Sometimes there can be no seqnames left after removing
+    # those with unknown levels. This happens often in chromosome names
+    # are mismatched ("chr1" vs "1")
+    region_no_common_seq = region_with_extra_seq_level
+    seqnames(region_no_common_seq) = "extra_seqlevels"
+    
+    test_invalid_region(region_with_extra_seq, "No seqlevels matching between regions and bam file", force_seqlevels=TRUE)
 }
 
-# Valid regions with extra seqlevels force
-test.metagene_initialize_valid_regions_supplementary_seqlevels_force <- function() {
-    region <- rtracklayer::import(regions[1])
-    GenomeInfoDb::seqlevels(region) <- c(GenomeInfoDb::seqlevels(region),
-                                        "extra_seqlevels")
-    obs <- tryCatch(mg <- metagene2$new(regions = region, bam_files = bam_files[1],
-                force_seqlevels = TRUE),
-                    error = conditionMessage)
-    checkIdentical(class(mg), c("metagene", "R6"))
-}
-
-# Invalid Extra seqnames
-test.metagene_initialize_invalid_extra_seqnames <- function() {
-    region <- rtracklayer::import(regions[1])
-    GenomeInfoDb::seqlevels(region) <- "extra_seqlevels"
-    obs <- tryCatch(metagene2$new(regions = region, bam_files = bam_files[1]),
-                    error = conditionMessage)
-    exp <- "Some seqlevels of regions are absent in bam_file"
-    checkIdentical(obs, exp)
-}
-
-# Extra seqnames with force
-test.metagene_initialize_one_extra_seqnames_force_seqlevels <- function() {
-    region <- rtracklayer::import(regions[1])
-    GenomeInfoDb::seqlevels(region) <- c(GenomeInfoDb::seqlevels(region),
-                                        "extra_seqlevels")
-    GenomeInfoDb::seqnames(region)[1] <- "extra_seqlevels"
-    mg <- tryCatch(metagene2$new(regions = region, bam_files = bam_files[1],
-                                force_seqlevels = TRUE),
-                error = conditionMessage)
-    checkIdentical(class(mg), c("metagene", "R6"))
-}
-
-# Invalid all extra seqnames with force
-test.metagene_initialize_all_extra_seqnames_force_seqlevels <- function() {
-    region <- rtracklayer::import(regions[1])
-    GenomeInfoDb::seqlevels(region) <- "extra_seqlevels"
-    obs <- tryCatch(metagene2$new(regions = region, bam_files = bam_files[1],
-                                force_seqlevels = TRUE),
-                    error = conditionMessage)
-    exp <- "No seqlevels matching between regions and bam file"
-    checkIdentical(obs, exp)
-}
 
 # Valid regions narrowPeak
 test.metagene_initialize_valid_narrowpeak <- function() {
-    region <- metagene2:::get_narrowpeak_region()
+    region <- metagene2:::get_narrowpeak_file()
     mg <- metagene2$new(regions = region, bam_files = bam_files[1])
     obs <- mg$get_regions()$list1
     extraCols <- c(signalValue = "numeric", pValue = "numeric",
-                qValue = "numeric", peak = "integer")
+                   qValue = "numeric", peak = "integer")
     exp <- rtracklayer::import(region, format = "BED", extraCols = extraCols)
     checkIdentical(obs, exp)
 }
 
 # Valid regions broadPeak
 test.metagene_initialize_valid_broadpeak <- function() {
-    region <- metagene2:::get_broadpeak_region()
+    region <- metagene2:::get_broadpeak_file()
     mg <- metagene2$new(regions = region, bam_files = bam_files[1])
     obs <- mg$get_regions()$list1
     extraCols <- c(signalValue = "numeric", pValue = "numeric",
-                qValue = "numeric")
+                   qValue = "numeric")
     exp <- rtracklayer::import(region, format = "BED", extraCols = extraCols)
     checkIdentical(obs, exp)
 }
 
 # Valid named bam files
-test.metagene_initialize_valid_named_bam_files <- function() {
-    mg <- metagene2$new(regions = regions[1], bam_files = named_bam_files[1])
+test.metagene_initialize_valid_bam_files <- function() {
+    mg <- metagene2$new(regions = get_demo_regions(), bam_files = get_demo_bam_files())
+    
+    # Make sure all bam_files were kept.
     obs <- mg$get_params()[["bam_files"]]
-    exp <- named_bam_files[1]
+    exp <- get_demo_bam_files()
     checkIdentical(obs, exp)
+    
+    # Make sure we have coverage for all bam files.
     obs <- names(mg$get_raw_coverages())
-    exp <- names(named_bam_files)[1]
+    exp <- get_demo_bam_files()
     checkIdentical(obs, exp)
-}
-
-# Valid unnamed bam files
-test.metagene_initialize_valid_unnamed_bam_files <- function() {
-    mg <- metagene2$new(regions = regions[1], bam_files = bam_files[1])
-    obs <- mg$get_params()[["bam_files"]]
-    exp <- bam_files[1]
-    names(exp) <- tools::file_path_sans_ext(basename(bam_files[1]))
-    checkIdentical(obs, exp)
+    
+    # NAmed bam files should have no impact (Historically, they changed the coverage names.)
+    named_bam_files = get_demo_bam_files()
+    names(named_bam_files) = letters[seq_along(named_bam_files)]
+    mg <- metagene2$new(regions = get_demo_regions(), bam_files = named_bam_files)
+    
+    # Make sure we have coverage for all bam files under the correct names.
     obs <- names(mg$get_raw_coverages())
-    exp <- tools::file_path_sans_ext(basename(bam_files[1]))
-    checkIdentical(obs, exp)
+    exp <- unname(named_bam_files)
+    checkIdentical(obs, exp)    
 }
 
 ##################################################

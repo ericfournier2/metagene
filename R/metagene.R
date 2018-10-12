@@ -650,7 +650,9 @@ metagene2 <- R6Class("metagene",
                     stop("regions is a list of files, but some of those files do not exist.")
                 }
                 regions = private$import_regions_from_disk(regions)
-            } else if (class(regions) == "GRanges") {
+            }
+
+            if (class(regions) == "GRanges") {
                 if(region_mode=="stitch") {
                     if(length(unique(seqnames(regions))) > 1) {
                         stop(paste0("In stitch region_mode, such as in rnaseq assays, regions should be a ",
@@ -982,8 +984,12 @@ metagene2 <- R6Class("metagene",
                     rtracklayer::import(region, format = "BED",
                                         extraCols = extraCols)
                 } else if (ext == "gtf" | ext == "gff") {
-                    split(rtracklayer::import(region), 
-                            rtracklayer::import(region)$gene_id)
+                    gxf_regions = rtracklayer::import(region)
+                    if("gene_id" %in% colnames(mcols(gxf_regions))) {
+                        return(split(gxf_regions, gxf_regions$gene_id))
+                    } else {
+                        return(gxf_regions)
+                    }
                 } else {
                     rtracklayer::import(region)
                 }

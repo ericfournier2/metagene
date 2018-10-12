@@ -109,10 +109,18 @@ get_coverage_region <- function() {
     system.file("extdata/list_coverage.bed", package = "metagene2")
 }
 
-get_narrowpeak_region <- function() {
+get_narrowpeak_file <- function() {
     system.file("extdata/list1.narrowPeak", package = "metagene2")
 }
 
-get_broadpeak_region <- function() {
+get_broadpeak_file <- function() {
     system.file("extdata/list1.broadPeak", package = "metagene2")
+}
+
+get_gff_file <- function() {
+    system.file("extdata/test.gff", package = "metagene2")
+}
+
+get_gtf_file <- function() {
+    system.file("extdata/test.gtf", package = "metagene2")
 }
