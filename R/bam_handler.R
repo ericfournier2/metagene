@@ -377,6 +377,11 @@ Bam_Handler <- R6Class("Bam_Handler",
                                                paired_end = FALSE,
                                                strand_specific=FALSE,
                                                paired_end_strand_mode=2, extend=0){
+            if(extend > 0) {
+                start(regions) = pmax(start(regions)-extend, 1)
+                end(regions) = end(regions)+extend
+            }
+                                               
             if(!strand_specific) {
                 alignment = list('+'=NULL, '-'=NULL,
                                  '*'=private$read_alignments(regions, bam_file, paired_end=paired_end,
