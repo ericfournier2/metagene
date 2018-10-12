@@ -954,7 +954,7 @@ metagene2 <- R6Class("metagene",
             
             # Concatenate the bam names and the identity matrix, then
             # rename all columns but the first.
-            design <- cbind(data.frame(bam_files = bam_files), diag(length(bam_files)))
+            design <- cbind(data.frame(bam_files = bam_files, stringsAsFactors=FALSE), diag(length(bam_files)))
             colnames(design)[-1] = names(bam_files)
             
             design

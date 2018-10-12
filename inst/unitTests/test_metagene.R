@@ -304,6 +304,16 @@ test.metagene_group_coverages_valid_usage_default = function(){
     checkIdentical(length(grouped_coverages), ncol(get_demo_design()) - 1)
 }
 
+# Make sure bam_files order does not change results.
+# See issue #7: https://github.com/ArnaudDroitLab/metagene2/issues/7
+test.metagene_group_coverages_bam_files_order = function(){
+    mg  = metagene2$new(regions=get_demo_regions(), bam_files=get_demo_bam_files())
+    mg2 = metagene2$new(regions=get_demo_regions(), bam_files=rev(get_demo_bam_files()))
+    checkIdentical(mg$bin_coverages()[["align1_rep1"]][1:10,1:10],
+                   mg2$bin_coverages()[["align1_rep1"]][1:10,1:10])
+}
+
+
 test.metagene_bin_coverages_valid_usage_default_design = function(){
     mg <- demo_mg$clone(deep=TRUE)
     mg$group_coverages()

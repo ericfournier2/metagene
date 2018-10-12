@@ -228,7 +228,7 @@ merge_chip = function(coverages, design, merge_operation) {
 # the value design_value in column design_name of the design data-frame.
 merge_reduce = function(coverages, design, design_name, design_value, merge_operation) {
     indices = design[[design_name]] == design_value
-    bam_names <- design[indices, 1]
+    bam_names <- as.character(design[indices, 1])
     
     reduced_coverages = Reduce("+", coverages[bam_names])
     if(merge_operation=="mean" && sum(indices) > 1) {
