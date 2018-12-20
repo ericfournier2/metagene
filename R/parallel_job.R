@@ -28,30 +28,34 @@ Parallel_Job <- R6Class("Parallel_Job",
             }
         },
         set_core_count = function(cores) {
+            # Stop any previous thread pool. I can't really fathom
+            # a situation where people just keep setting new BPPARAMs
+            # until we run out of threads or memory, but better safe than sorry.
+            tryCatch({
+                bpstop(self$BPPARAM)
+            })            
+            
             # Note: cores can be numeric or BiocParallelParam instance
             #       BPPARAM is always a BiocParallelParam instance
-            self$parameters[["cores"]] <- cores
-            self$BPPARAM <- private$get_bpparam(cores)
+            self$BPPARAM <- private$set_bpparam(cores)
+            self$parameters[["cores"]] <- cores            
         }
     ),
     private = list(
-        get_bpparam = function(cores) {
+        set_bpparam = function(cores) {
 			if (is.numeric(cores)) {
-                if (.Platform$OS.type != "unix") {
-                    warning("numeric core parameter is not supported for non-unix systems")
+                # The number of cores has to be a positive integer
+                if(as.integer(cores) != cores || cores <= 0) {
+                    msg <- "cores must be positive numeric or "
+                    msg <- paste0(msg, "BiocParallelParam instance.")
+                    stop(msg)
+                }
+                if (cores == 1) {
                     BPPARAM <- SerialParam()
+                } else if (.Platform$OS.type != "unix") {
+                    BPPARAM <- SnowParam(workers = cores)
                 } else {
-                    # The number of cores has to be a positive integer
-                    if(as.integer(cores) != cores || cores <= 0) {
-                        msg <- "cores must be positive numeric or "
-                        msg <- paste0(msg, "BiocParallelParam instance.")
-                        stop(msg)
-                    }
-                    if (cores == 1) {
-                        BPPARAM <- SerialParam()
-                    } else {
-                        BPPARAM <- MulticoreParam(workers = cores)
-                    }
+                    BPPARAM <- MulticoreParam(workers = cores)
                 }
             } else {
             # Must be one of the BiocParallelParam class

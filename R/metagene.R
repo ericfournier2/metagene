@@ -317,8 +317,7 @@ metagene2 <- R6Class("metagene",
             private$ph$update_params(...)
                 
             # Prepare objects for parralel processing.
-            validate_cores(cores)
-            private$parallel_job <- Parallel_Job$new(cores)
+            self$set_cores(cores)
             
             # Prepare bam files
             bm = private$start_bm("Prepare bam files")
@@ -400,6 +399,14 @@ metagene2 <- R6Class("metagene",
                 return(private$get_normalized_coverages_internal(filenames)[['*']])
             } else {
                 return(private$get_normalized_coverages_internal(filenames))
+            }
+        },
+        set_cores = function(cores) {
+            validate_cores(cores)
+            if(is.null(private$parallel_job)) {
+                private$parallel_job <- Parallel_Job$new(cores)
+            } else {
+                private$parallel_job$set_core_count(cores)
             }
         },
         produce_data_frame = function(alpha=NA, sample_count=NA, avoid_gaps=NA, 
@@ -635,7 +642,7 @@ metagene2 <- R6Class("metagene",
 
         # Objects for handling bams, parameters and parallel jobs.
         bam_handler = "",
-        parallel_job = "",
+        parallel_job = NULL,
         ph=NULL,
         
         print_verbose = function(to_print) {
