@@ -124,3 +124,8 @@ validate_region_mode = function(region_mode) {
         stop("region_mode must be 'auto', 'separate' or 'stitch'")
     }
 }
+
+validate_extend_reads = function(extend_reads) {
+    stopifnot(is.numeric(extend_reads))
+    stopifnot(extend_reads >= 0)
+}

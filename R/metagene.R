@@ -308,7 +308,8 @@ metagene2 <- R6Class("metagene",
                     bin_count=validate_bin_count,
                     alpha=validate_alpha,
                     sample_count=validate_sample_count,
-                    region_mode=validate_region_mode),
+                    region_mode=validate_region_mode,
+                    extend_reads=validate_extend_reads),
                 overall_validation=validate_combination)
                 
             # Update any other parameter passed as a ... argument.
